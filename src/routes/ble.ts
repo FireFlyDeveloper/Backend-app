@@ -10,21 +10,43 @@ import {
   getPresence,
   getHistory,
 } from '../controllers/bleController';
+import {
+  getRooms,
+  getRoom,
+  postRoom,
+  getDevices,
+  getDevice,
+  postDevice,
+  putDeviceRoom,
+  putDeviceLabel,
+  deleteDevice,
+} from '../controllers/deviceController';
 
 const router = Router();
 
-// Admin only for tag registration / assignment
-router.post('/', authenticate, requireAdmin, postBleTag);
-router.put('/:id/assign', authenticate, requireAdmin, putAssignTag);
-router.put('/:id/unassign', authenticate, requireAdmin, putUnassignTag);
-router.delete('/:id', authenticate, requireAdmin, deleteBleTag);
+// ─── Rooms ──────────────────────────────────────────────
+router.get('/rooms', authenticate, requireRoles('admin', 'staff'), getRooms);
+router.get('/rooms/:id', authenticate, requireRoles('admin', 'staff'), getRoom);
+router.post('/rooms', authenticate, requireAdmin, postRoom);
 
-// Staff can view
-router.get('/', authenticate, requireRoles('admin', 'staff'), getBleTags);
-router.get('/:id', authenticate, requireRoles('admin', 'staff'), getBleTag);
+// ─── BLE Gateway Devices ────────────────────────────────
+router.get('/devices', authenticate, requireRoles('admin', 'staff'), getDevices);
+router.get('/devices/:id', authenticate, requireRoles('admin', 'staff'), getDevice);
+router.post('/devices', authenticate, requireAdmin, postDevice);
+router.patch('/devices/:id', authenticate, requireAdmin, putDeviceLabel);
+router.delete('/devices/:id', authenticate, requireAdmin, deleteDevice);
 
-// Presence & history
+// ─── BLE Tags ───────────────────────────────────────────
+router.get('/tags', authenticate, requireRoles('admin', 'staff'), getBleTags);
+router.get('/tags/:id', authenticate, requireRoles('admin', 'staff'), getBleTag);
+router.post('/tags', authenticate, requireAdmin, postBleTag);
+router.patch('/tags/:id/assign', authenticate, requireAdmin, putAssignTag);
+router.patch('/tags/:id/unassign', authenticate, requireAdmin, putUnassignTag);
+router.delete('/tags/:id', authenticate, requireAdmin, deleteBleTag);
+
+// ─── Presence & History ─────────────────────────────────
 router.get('/presence', authenticate, requireRoles('admin', 'staff'), getPresence);
+router.get('/presence/:itemId', authenticate, requireRoles('admin', 'staff'), getHistory);
 router.get('/history/:itemId', authenticate, requireRoles('admin', 'staff'), getHistory);
 
 export default router;
