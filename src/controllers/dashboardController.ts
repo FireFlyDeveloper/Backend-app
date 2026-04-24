@@ -23,20 +23,18 @@ export async function getDashboardStats(req: AuthRequest, res: Response, next: N
     const checkoutCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM checkout_transactions`);
     const missingCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM item_presence_state WHERE presence_status = 'missing'`);
     const offlineCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM devices WHERE is_active = true AND offline_since IS NOT NULL`);
-    const activeDeviceCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM devices WHERE is_active = true AND offline_since IS NULL`);
+    const activeCheckoutCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM checkout_transactions WHERE status = 'open'`);
     const userCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM users WHERE deleted_at IS NULL`);
-    const roomCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM rooms`);
 
     res.json({
       stats: {
-        items: parseInt(itemCount.rows[0].count, 10),
-        documents: parseInt(documentCount.rows[0].count, 10),
-        checkouts: parseInt(checkoutCount.rows[0].count, 10),
-        missingItems: parseInt(missingCount.rows[0].count, 10),
-        offlineDevices: parseInt(offlineCount.rows[0].count, 10),
-        activeDevices: parseInt(activeDeviceCount.rows[0].count, 10),
-        users: parseInt(userCount.rows[0].count, 10),
-        rooms: parseInt(roomCount.rows[0].count, 10),
+        totalItems: parseInt(itemCount.rows[0].count, 10),
+        totalDocuments: parseInt(documentCount.rows[0].count, 10),
+        totalUsers: parseInt(userCount.rows[0].count, 10),
+        missingItemsCount: parseInt(missingCount.rows[0].count, 10),
+        offlineDevicesCount: parseInt(offlineCount.rows[0].count, 10),
+        recentCheckoutsCount: parseInt(checkoutCount.rows[0].count, 10),
+        activeCheckoutsCount: parseInt(activeCheckoutCount.rows[0].count, 10),
       },
     });
   } catch (err) {
@@ -54,7 +52,6 @@ export async function getRecentActivity(req: AuthRequest, res: Response, next: N
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
     const safeLimit = Math.min(Math.max(limit, 1), 100);
 
-    // Unified recent activity from audit_logs, document_activity_logs, and checkout_transactions
     const result = await query<{
       id: string;
       source: string;
@@ -89,7 +86,17 @@ export async function getRecentActivity(req: AuthRequest, res: Response, next: N
       LIMIT $1
     `, [safeLimit]);
 
-    res.json({ activity: result.rows });
+    // Map to frontend expected shape
+    const activity = result.rows.map((r) => ({
+      id: r.id,
+      entityType: r.entity_type || r.source,
+      action: r.action,
+      actorName: r.actor_id || 'System',
+      description: r.metadata ? JSON.stringify(r.metadata) : '',
+      createdAt: r.created_at,
+    }));
+
+    res.json({ activity });
   } catch (err) {
     next(err);
   }
@@ -105,17 +112,22 @@ export async function getRoomStatus(req: AuthRequest, res: Response, next: NextF
     const result = await query<{
       room_id: string;
       room_name: string;
+      item_count: string;
       present_count: string;
-      device_count: string;
-      offline_device_count: string;
+      missing_count: string;
     }>(`
       SELECT
         r.id as room_id,
         r.name as room_name,
+        COALESCE(i.item_count, 0)::text as item_count,
         COALESCE(p.present_count, 0)::text as present_count,
-        COALESCE(d.device_count, 0)::text as device_count,
-        COALESCE(doff.offline_device_count, 0)::text as offline_device_count
+        COALESCE(m.missing_count, 0)::text as missing_count
       FROM rooms r
+      LEFT JOIN (
+        SELECT current_room_id, COUNT(*) as item_count
+        FROM item_presence_state
+        GROUP BY current_room_id
+      ) i ON i.current_room_id = r.id
       LEFT JOIN (
         SELECT current_room_id, COUNT(*) as present_count
         FROM item_presence_state
@@ -123,27 +135,21 @@ export async function getRoomStatus(req: AuthRequest, res: Response, next: NextF
         GROUP BY current_room_id
       ) p ON p.current_room_id = r.id
       LEFT JOIN (
-        SELECT room_id, COUNT(*) as device_count
-        FROM devices
-        WHERE is_active = true
-        GROUP BY room_id
-      ) d ON d.room_id = r.id
-      LEFT JOIN (
-        SELECT room_id, COUNT(*) as offline_device_count
-        FROM devices
-        WHERE is_active = true AND offline_since IS NOT NULL
-        GROUP BY room_id
-      ) doff ON doff.room_id = r.id
+        SELECT current_room_id, COUNT(*) as missing_count
+        FROM item_presence_state
+        WHERE presence_status = 'missing'
+        GROUP BY current_room_id
+      ) m ON m.current_room_id = r.id
       ORDER BY r.name
     `);
 
     res.json({
       rooms: result.rows.map((r) => ({
-        room_id: r.room_id,
-        room_name: r.room_name,
-        present_count: parseInt(r.present_count, 10),
-        device_count: parseInt(r.device_count, 10),
-        offline_device_count: parseInt(r.offline_device_count, 10),
+        roomId: r.room_id,
+        roomName: r.room_name,
+        itemCount: parseInt(r.item_count, 10),
+        presentCount: parseInt(r.present_count, 10),
+        missingCount: parseInt(r.missing_count, 10),
       })),
     });
   } catch (err) {

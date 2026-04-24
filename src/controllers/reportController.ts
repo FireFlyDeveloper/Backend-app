@@ -117,7 +117,14 @@ export async function getInventoryMovementReport(req: AuthRequest, res: Response
       return res.send(body);
     }
 
-    res.json({ transactions: result.rows });
+    // Map to frontend expected shape
+    const data = result.rows.map((r) => ({
+      date: r.created_at,
+      checkouts: r.status === 'open' || r.status === 'partially_returned' ? 1 : 0,
+      returns: r.status === 'closed' ? 1 : 0,
+    }));
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }
@@ -189,7 +196,19 @@ export async function getCheckoutHistoryReport(req: AuthRequest, res: Response, 
       return res.send(body);
     }
 
-    res.json({ history: result.rows });
+    // Map to frontend expected shape
+    const data = result.rows.map((r) => ({
+      id: r.transaction_id,
+      checkedOutBy: r.checked_out_by_name || r.checked_out_by,
+      processedBy: r.returned_by_name || null,
+      status: r.status,
+      notes: r.notes,
+      createdAt: r.checkout_date,
+      updatedAt: r.return_date || r.checkout_date,
+      itemCount: r.quantity_out || 0,
+    }));
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }
@@ -249,7 +268,18 @@ export async function getMissingHistoryReport(req: AuthRequest, res: Response, n
       return res.send(body);
     }
 
-    res.json({ missingItems: result.rows });
+    // Map to frontend expected shape
+    const data = result.rows.map((r) => ({
+      itemId: r.item_id,
+      itemName: r.item_name,
+      roomId: r.current_room_id,
+      roomName: r.room_name,
+      status: 'missing',
+      lastSeen: r.last_seen_at,
+      detectedAt: r.missing_since,
+    }));
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }
@@ -316,7 +346,17 @@ export async function getDeviceHealthReport(req: AuthRequest, res: Response, nex
       return res.send(body);
     }
 
-    res.json({ devices: result.rows });
+    // Map to frontend expected shape
+    const data = result.rows.map((r) => ({
+      deviceId: r.id,
+      deviceName: r.label || r.device_code,
+      roomName: r.room_name,
+      status: r.health_status,
+      lastSeen: r.last_heartbeat || r.offline_since,
+      uptimePercent: r.health_status === 'online' ? 100 : (r.health_status === 'offline' ? 0 : null),
+    }));
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }

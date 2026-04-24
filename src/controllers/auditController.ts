@@ -77,14 +77,21 @@ export async function getAuditLogs(req: AuthRequest, res: Response, next: NextFu
       [...values, limitNum, offset]
     );
 
+    // Map to frontend expected shape
+    const logs = result.rows.map((r) => ({
+      id: r.id,
+      entityType: r.entity_type,
+      action: r.action,
+      actorId: r.actor_id,
+      actorName: r.actor_id || 'System',
+      entityId: r.entity_id,
+      metadata: r.after_state || r.before_state || null,
+      createdAt: r.created_at,
+    }));
+
     res.json({
-      logs: result.rows,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages: Math.ceil(total / limitNum),
-      },
+      logs,
+      total,
     });
   } catch (err) {
     next(err);
@@ -105,9 +112,13 @@ export async function getAuditSummary(req: AuthRequest, res: Response, next: Nex
       `SELECT ${groupField} as field, COUNT(*)::text as count FROM audit_logs GROUP BY ${groupField} ORDER BY count DESC`
     );
 
+    const summary = result.rows.map((r) => ({
+      [groupField]: r.field,
+      count: parseInt(r.count, 10),
+    }));
+
     res.json({
-      groupBy: groupField,
-      summary: result.rows.map((r) => ({ field: r.field, count: parseInt(r.count, 10) })),
+      summary,
     });
   } catch (err) {
     next(err);

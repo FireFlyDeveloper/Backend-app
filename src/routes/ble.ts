@@ -21,6 +21,8 @@ import {
   putDeviceLabel,
   deleteDevice,
 } from '../controllers/deviceController';
+import { patchRoom, deleteRoom } from '../controllers/deviceController';
+
 
 const router = Router();
 
@@ -28,6 +30,8 @@ const router = Router();
 router.get('/rooms', authenticate, requireRoles('admin', 'staff'), getRooms);
 router.get('/rooms/:id', authenticate, requireRoles('admin', 'staff'), getRoom);
 router.post('/rooms', authenticate, requireAdmin, postRoom);
+router.patch('/rooms/:id', authenticate, requireAdmin, patchRoom);
+router.delete('/rooms/:id', authenticate, requireAdmin, deleteRoom);
 
 // ─── BLE Gateway Devices ────────────────────────────────
 router.get('/devices', authenticate, requireRoles('admin', 'staff'), getDevices);

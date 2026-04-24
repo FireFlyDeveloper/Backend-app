@@ -7,6 +7,8 @@ import {
   updateDeviceRoom,
   updateDeviceLabel,
   softDeleteDevice,
+  updateRoom,
+  softDeleteRoom,
   listRooms,
   getRoomById,
   createRoom,
@@ -39,6 +41,25 @@ export async function postRoom(req: AuthRequest, res: Response, next: NextFuncti
     if (!name) throw new ValidationError('name is required');
     const room = await createRoom({ name, building, floor, description });
     res.status(201).json({ room });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchRoom(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { name, building, floor, description } = req.body;
+    const room = await updateRoom(req.params.id as string, { name, building, floor, description });
+    res.json({ room });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteRoom(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    await softDeleteRoom(req.params.id as string);
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

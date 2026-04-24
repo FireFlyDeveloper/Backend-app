@@ -149,12 +149,13 @@ export async function getFolderDocuments(req: AuthRequest, res: Response, next: 
 export async function uploadDocument(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const ctx = getUserContext(req);
-    const { folder_id, name } = req.body;
+    const { folder_id, folderId, name } = req.body;
+    const folderIdValue = folder_id || folderId;
     const file = (req as any).file;
     if (!file) throw new ValidationError('File is required');
 
-    if (folder_id) {
-      const perm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, folder_id as string);
+    if (folderIdValue) {
+      const perm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, folderIdValue as string);
       if (!perm || (perm !== 'editor' && perm !== 'manager' && !ctx.isAdmin)) {
         throw new ForbiddenError('Editor permission required on folder');
       }
@@ -169,7 +170,7 @@ export async function uploadDocument(req: AuthRequest, res: Response, next: Next
     fs.renameSync(file.path, destPath);
 
     const doc = await createDocument({
-      folder_id: folder_id || null,
+      folder_id: folderIdValue || null,
       name: name || file.originalname,
       mime_type: file.mimetype,
       size_bytes: file.size,

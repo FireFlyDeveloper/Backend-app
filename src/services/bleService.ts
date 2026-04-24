@@ -35,6 +35,31 @@ export async function createRoom(data: { name: string; building?: string; floor?
 
 // ======================= Devices =======================
 
+export async function updateRoom(id: string, data: { name?: string; building?: string; floor?: number; description?: string }): Promise<Room> {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let idx = 1;
+
+  if (data.name !== undefined) { sets.push(`name = $${idx++}`); values.push(data.name); }
+  if (data.building !== undefined) { sets.push(`building = $${idx++}`); values.push(data.building); }
+  if (data.floor !== undefined) { sets.push(`floor = $${idx++}`); values.push(data.floor); }
+  if (data.description !== undefined) { sets.push(`description = $${idx++}`); values.push(data.description); }
+
+  if (sets.length === 0) throw new ValidationError('No fields to update');
+  values.push(id);
+
+  const result = await query<Room>(
+    `UPDATE rooms SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    values
+  );
+  if (result.rows.length === 0) throw new NotFoundError('Room not found');
+  return result.rows[0];
+}
+
+export async function softDeleteRoom(id: string): Promise<void> {
+  const result = await query('UPDATE rooms SET deleted_at = NOW() WHERE id = $1', [id]);
+  if (result.rowCount === 0) throw new NotFoundError('Room not found');
+}
 export async function listDevices(): Promise<Device[]> {
   const result = await query<Device>(
     `SELECT d.*, r.name as room_name
