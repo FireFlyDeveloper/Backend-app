@@ -4,6 +4,7 @@ import {
   getBleTags,
   getBleTag,
   postBleTag,
+  patchBleTag,
   putAssignTag,
   putUnassignTag,
   deleteBleTag,
@@ -14,15 +15,14 @@ import {
   getRooms,
   getRoom,
   postRoom,
+  patchRoom,
+  deleteRoom,
   getDevices,
   getDevice,
   postDevice,
-  putDeviceRoom,
-  putDeviceLabel,
+  patchDevice,
   deleteDevice,
 } from '../controllers/deviceController';
-import { patchRoom, deleteRoom } from '../controllers/deviceController';
-
 
 const router = Router();
 
@@ -37,13 +37,14 @@ router.delete('/rooms/:id', authenticate, requireAdmin, deleteRoom);
 router.get('/devices', authenticate, requireRoles('admin', 'staff'), getDevices);
 router.get('/devices/:id', authenticate, requireRoles('admin', 'staff'), getDevice);
 router.post('/devices', authenticate, requireAdmin, postDevice);
-router.patch('/devices/:id', authenticate, requireAdmin, putDeviceLabel);
+router.patch('/devices/:id', authenticate, requireAdmin, patchDevice);
 router.delete('/devices/:id', authenticate, requireAdmin, deleteDevice);
 
 // ─── BLE Tags ───────────────────────────────────────────
 router.get('/tags', authenticate, requireRoles('admin', 'staff'), getBleTags);
 router.get('/tags/:id', authenticate, requireRoles('admin', 'staff'), getBleTag);
 router.post('/tags', authenticate, requireAdmin, postBleTag);
+router.patch('/tags/:id', authenticate, requireAdmin, patchBleTag);
 router.patch('/tags/:id/assign', authenticate, requireAdmin, putAssignTag);
 router.patch('/tags/:id/unassign', authenticate, requireAdmin, putUnassignTag);
 router.delete('/tags/:id', authenticate, requireAdmin, deleteBleTag);

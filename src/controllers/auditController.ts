@@ -18,13 +18,19 @@ export async function getAuditLogs(req: AuthRequest, res: Response, next: NextFu
       throw new ForbiddenError('Audit log access requires staff or admin role');
     }
 
+    // Accept both camelCase (frontend) and snake_case (direct API)
     const {
       entity_type,
+      entityType,
       entity_id,
+      entityId,
       actor_id,
+      actorId,
       action,
       date_from,
+      startDate,
       date_to,
+      endDate,
       page,
       limit,
     } = req.query;
@@ -33,29 +39,35 @@ export async function getAuditLogs(req: AuthRequest, res: Response, next: NextFu
     const values: any[] = [];
     let idx = 1;
 
-    if (entity_type) {
+    const et = entity_type || entityType;
+    const ei = entity_id || entityId;
+    const ai = actor_id || actorId;
+    const df = date_from || startDate;
+    const dt = date_to || endDate;
+
+    if (et) {
       conditions.push(`entity_type = $${idx++}`);
-      values.push(entity_type as string);
+      values.push(et as string);
     }
-    if (entity_id) {
+    if (ei) {
       conditions.push(`entity_id = $${idx++}`);
-      values.push(entity_id as string);
+      values.push(ei as string);
     }
-    if (actor_id) {
+    if (ai) {
       conditions.push(`actor_id = $${idx++}`);
-      values.push(actor_id as string);
+      values.push(ai as string);
     }
     if (action) {
       conditions.push(`action = $${idx++}`);
       values.push(action as string);
     }
-    if (date_from) {
+    if (df) {
       conditions.push(`created_at >= $${idx++}`);
-      values.push(date_from as string);
+      values.push(df as string);
     }
-    if (date_to) {
+    if (dt) {
       conditions.push(`created_at <= $${idx++}`);
-      values.push(date_to as string);
+      values.push(dt as string);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -105,8 +117,9 @@ export async function getAuditSummary(req: AuthRequest, res: Response, next: Nex
       throw new ForbiddenError('Audit log access requires staff or admin role');
     }
 
-    const { group_by } = req.query;
-    const groupField = group_by === 'action' ? 'action' : 'entity_type';
+    // Accept both camelCase and snake_case
+    const groupBy = req.query.group_by || req.query.groupBy;
+    const groupField = groupBy === 'action' ? 'action' : 'entity_type';
 
     const result = await query<{ field: string; count: string }>(
       `SELECT ${groupField} as field, COUNT(*)::text as count FROM audit_logs GROUP BY ${groupField} ORDER BY count DESC`

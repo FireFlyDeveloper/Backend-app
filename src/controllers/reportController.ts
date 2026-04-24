@@ -11,10 +11,11 @@ function getUserContext(req: AuthRequest) {
 }
 
 function parseDateRange(req: AuthRequest): { dateFrom?: string; dateTo?: string } {
-  const { date_from, date_to } = req.query;
+  // Accept both camelCase (frontend) and snake_case (direct API)
+  const { date_from, date_to, startDate, endDate } = req.query;
   return {
-    dateFrom: date_from as string | undefined,
-    dateTo: date_to as string | undefined,
+    dateFrom: (date_from || startDate) as string | undefined,
+    dateTo: (date_to || endDate) as string | undefined,
   };
 }
 

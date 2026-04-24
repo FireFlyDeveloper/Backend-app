@@ -87,10 +87,34 @@ export async function getDevice(req: AuthRequest, res: Response, next: NextFunct
 
 export async function postDevice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { device_code, room_id, label } = req.body;
-    if (!device_code) throw new ValidationError('device_code is required');
+    // Accept frontend field names: device_id -> device_code, name -> label
+    const device_code = req.body.device_id ?? req.body.device_code;
+    const label = req.body.name ?? req.body.label;
+    const { room_id } = req.body;
+    if (!device_code) throw new ValidationError('device_id or device_code is required');
     const device = await createDevice({ device_code, room_id, label });
     res.status(201).json({ device });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function patchDevice(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    // Accept frontend field names: name -> label, room_id -> room_id
+    const label = req.body.name ?? req.body.label;
+    const room_id = req.body.room_id;
+    const deviceId = req.params.id as string;
+
+    if (label !== undefined) {
+      await updateDeviceLabel(deviceId, label);
+    }
+    if (room_id !== undefined) {
+      await updateDeviceRoom(deviceId, room_id || null);
+    }
+
+    const device = await getDeviceById(deviceId);
+    res.json({ device });
   } catch (err) {
     next(err);
   }

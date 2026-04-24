@@ -327,9 +327,14 @@ export async function postDocumentPermission(req: AuthRequest, res: Response, ne
     const userPerm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
     if (!userPerm || (userPerm !== 'manager' && !ctx.isAdmin)) throw new ForbiddenError('Manager permission required');
 
-    const { user_id, role_id, permission, inherit } = req.body;
-    if (!permission) throw new ValidationError('permission is required');
-    if (!user_id && !role_id) throw new ValidationError('user_id or role_id is required');
+    // Accept both camelCase (frontend) and snake_case (direct API)
+    const user_id = req.body.user_id ?? req.body.userId;
+    const role_id = req.body.role_id ?? req.body.role;
+    const permission = req.body.permission ?? req.body.level;
+    const inherit = req.body.inherit;
+
+    if (!permission) throw new ValidationError('permission or level is required');
+    if (!user_id && !role_id) throw new ValidationError('user_id/userId or role_id/role is required');
 
     if (userPerm === 'manager' && permission === 'manager' && !ctx.isAdmin) {
       throw new ForbiddenError('Only admins can grant manager permission');
@@ -383,9 +388,14 @@ export async function postFolderPermission(req: AuthRequest, res: Response, next
     const userPerm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, req.params.id as string);
     if (!userPerm || (userPerm !== 'manager' && !ctx.isAdmin)) throw new ForbiddenError('Manager permission required');
 
-    const { user_id, role_id, permission, inherit } = req.body;
-    if (!permission) throw new ValidationError('permission is required');
-    if (!user_id && !role_id) throw new ValidationError('user_id or role_id is required');
+    // Accept both camelCase (frontend) and snake_case (direct API)
+    const user_id = req.body.user_id ?? req.body.userId;
+    const role_id = req.body.role_id ?? req.body.role;
+    const permission = req.body.permission ?? req.body.level;
+    const inherit = req.body.inherit;
+
+    if (!permission) throw new ValidationError('permission or level is required');
+    if (!user_id && !role_id) throw new ValidationError('user_id/userId or role_id/role is required');
 
     if (userPerm === 'manager' && permission === 'manager' && !ctx.isAdmin) {
       throw new ForbiddenError('Only admins can grant manager permission');

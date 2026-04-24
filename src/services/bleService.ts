@@ -164,6 +164,25 @@ export async function createBleTag(data: { tag_code: string; item_id?: string | 
   return result.rows[0];
 }
 
+
+export async function updateBleTag(id: string, data: { tag_code?: string; name?: string }): Promise<BleTag> {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let idx = 1;
+
+  if (data.tag_code !== undefined) { sets.push(`tag_code = $${idx++}`); values.push(data.tag_code); }
+  if (data.name !== undefined) { sets.push(`name = $${idx++}`); values.push(data.name); }
+
+  if (sets.length === 0) throw new ValidationError("No fields to update");
+  values.push(id);
+
+  const result = await query<BleTag>(
+    `UPDATE ble_tags SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+    values
+  );
+  if (result.rows.length === 0) throw new NotFoundError("Tag not found");
+  return result.rows[0];
+}
 export async function assignTagToItem(tagId: string, itemId: string, assignedBy: string): Promise<BleTag> {
   // Unassign any existing tag from this item
   await query(
