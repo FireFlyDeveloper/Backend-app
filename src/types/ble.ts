@@ -17,12 +17,27 @@ export interface Device {
   last_heartbeat: Date | null;
   offline_since: Date | null;
   is_active: boolean;
+  firmware_version: string | null;
   created_at: Date;
+}
+
+export interface DeviceResponse {
+  id: string;
+  device_id: string;
+  name: string;
+  room_id: string | null;
+  room_name: string | null;
+  status: 'online' | 'offline';
+  last_seen: string | null;
+  firmware_version: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface BleTag {
   id: string;
   tag_code: string;
+  name: string | null;
   item_id: string | null;
   assigned_at: Date | null;
   assigned_by: string | null;

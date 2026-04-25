@@ -6,6 +6,7 @@ import {
   createDevice,
   updateDeviceRoom,
   updateDeviceLabel,
+  updateDeviceFirmware,
   softDeleteDevice,
   updateRoom,
   softDeleteRoom,
@@ -90,9 +91,9 @@ export async function postDevice(req: AuthRequest, res: Response, next: NextFunc
     // Accept frontend field names: device_id -> device_code, name -> label
     const device_code = req.body.device_id ?? req.body.device_code;
     const label = req.body.name ?? req.body.label;
-    const { room_id } = req.body;
+    const { room_id, firmware_version } = req.body;
     if (!device_code) throw new ValidationError('device_id or device_code is required');
-    const device = await createDevice({ device_code, room_id, label });
+    const device = await createDevice({ device_code, room_id, label, firmware_version });
     res.status(201).json({ device });
   } catch (err) {
     next(err);
@@ -104,6 +105,7 @@ export async function patchDevice(req: AuthRequest, res: Response, next: NextFun
     // Accept frontend field names: name -> label, room_id -> room_id
     const label = req.body.name ?? req.body.label;
     const room_id = req.body.room_id;
+    const firmware_version = req.body.firmware_version;
     const deviceId = req.params.id as string;
 
     if (label !== undefined) {
@@ -111,6 +113,9 @@ export async function patchDevice(req: AuthRequest, res: Response, next: NextFun
     }
     if (room_id !== undefined) {
       await updateDeviceRoom(deviceId, room_id || null);
+    }
+    if (firmware_version !== undefined) {
+      await updateDeviceFirmware(deviceId, firmware_version);
     }
 
     const device = await getDeviceById(deviceId);

@@ -3,6 +3,7 @@ import { config } from '../utils/config';
 import {
   Room,
   Device,
+  DeviceResponse,
   BleTag,
   ItemPresenceState,
   ItemLocationHistory,
@@ -10,6 +11,24 @@ import {
 } from '../types/ble';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { broadcast } from './websocketService';
+
+// ======================= Response Mappers =======================
+
+function toDeviceResponse(row: any): DeviceResponse {
+  const isOnline = row.is_active && !row.offline_since;
+  return {
+    id: row.id,
+    device_id: row.device_code,
+    name: row.label || row.device_code,
+    room_id: row.room_id || null,
+    room_name: row.room_name || null,
+    status: isOnline ? 'online' : 'offline',
+    last_seen: row.last_heartbeat ? new Date(row.last_heartbeat).toISOString() : null,
+    firmware_version: row.firmware_version || null,
+    created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+  };
+}
 
 // ======================= Rooms =======================
 
@@ -32,8 +51,6 @@ export async function createRoom(data: { name: string; building?: string; floor?
   );
   return result.rows[0];
 }
-
-// ======================= Devices =======================
 
 export async function updateRoom(id: string, data: { name?: string; building?: string; floor?: number; description?: string }): Promise<Room> {
   const sets: string[] = [];
@@ -60,20 +77,30 @@ export async function softDeleteRoom(id: string): Promise<void> {
   const result = await query('UPDATE rooms SET deleted_at = NOW() WHERE id = $1', [id]);
   if (result.rowCount === 0) throw new NotFoundError('Room not found');
 }
-export async function listDevices(): Promise<Device[]> {
+
+// ======================= Devices =======================
+
+export async function listDevices(): Promise<DeviceResponse[]> {
   const result = await query<Device>(
     `SELECT d.*, r.name as room_name
      FROM devices d
      LEFT JOIN rooms r ON r.id = d.room_id
+     WHERE d.is_active = true
      ORDER BY d.device_code`
   );
-  return result.rows;
+  return result.rows.map(toDeviceResponse);
 }
 
-export async function getDeviceById(id: string): Promise<Device> {
-  const result = await query<Device>('SELECT * FROM devices WHERE id = $1', [id]);
+export async function getDeviceById(id: string): Promise<DeviceResponse> {
+  const result = await query<Device>(
+    `SELECT d.*, r.name as room_name
+     FROM devices d
+     LEFT JOIN rooms r ON r.id = d.room_id
+     WHERE d.id = $1`,
+    [id]
+  );
   if (result.rows.length === 0) throw new NotFoundError('Device not found');
-  return result.rows[0];
+  return toDeviceResponse(result.rows[0]);
 }
 
 export async function getDeviceByCode(device_code: string): Promise<Device | null> {
@@ -81,31 +108,40 @@ export async function getDeviceByCode(device_code: string): Promise<Device | nul
   return result.rows[0] ?? null;
 }
 
-export async function createDevice(data: { device_code: string; room_id?: string | null; label?: string }): Promise<Device> {
+export async function createDevice(data: { device_code: string; room_id?: string | null; label?: string; firmware_version?: string }): Promise<DeviceResponse> {
   const result = await query<Device>(
-    `INSERT INTO devices (device_code, room_id, label)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [data.device_code, data.room_id ?? null, data.label ?? null]
+    `INSERT INTO devices (device_code, room_id, label, firmware_version)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.device_code, data.room_id ?? null, data.label ?? null, data.firmware_version ?? null]
   );
-  return result.rows[0];
+  return toDeviceResponse(result.rows[0]);
 }
 
-export async function updateDeviceRoom(id: string, room_id: string | null): Promise<Device> {
+export async function updateDeviceRoom(id: string, room_id: string | null): Promise<DeviceResponse> {
   const result = await query<Device>(
     `UPDATE devices SET room_id = $1 WHERE id = $2 RETURNING *`,
     [room_id, id]
   );
   if (result.rows.length === 0) throw new NotFoundError('Device not found');
-  return result.rows[0];
+  return getDeviceById(id);
 }
 
-export async function updateDeviceLabel(id: string, label: string): Promise<Device> {
+export async function updateDeviceLabel(id: string, label: string): Promise<DeviceResponse> {
   const result = await query<Device>(
     `UPDATE devices SET label = $1 WHERE id = $2 RETURNING *`,
     [label, id]
   );
   if (result.rows.length === 0) throw new NotFoundError('Device not found');
-  return result.rows[0];
+  return getDeviceById(id);
+}
+
+export async function updateDeviceFirmware(id: string, firmware_version: string): Promise<DeviceResponse> {
+  const result = await query<Device>(
+    `UPDATE devices SET firmware_version = $1 WHERE id = $2 RETURNING *`,
+    [firmware_version, id]
+  );
+  if (result.rows.length === 0) throw new NotFoundError('Device not found');
+  return getDeviceById(id);
 }
 
 export async function softDeleteDevice(id: string): Promise<void> {
@@ -139,6 +175,7 @@ export async function listBleTags(): Promise<BleTag[]> {
     `SELECT bt.*, i.name as item_name
      FROM ble_tags bt
      LEFT JOIN items i ON i.id = bt.item_id
+     WHERE bt.is_active = true
      ORDER BY bt.tag_code`
   );
   return result.rows;
@@ -155,15 +192,14 @@ export async function getBleTagByCode(tag_code: string): Promise<BleTag | null> 
   return result.rows[0] ?? null;
 }
 
-export async function createBleTag(data: { tag_code: string; item_id?: string | null; assigned_by?: string | null }): Promise<BleTag> {
+export async function createBleTag(data: { tag_code: string; item_id?: string | null; assigned_by?: string | null; name?: string }): Promise<BleTag> {
   const result = await query<BleTag>(
-    `INSERT INTO ble_tags (tag_code, item_id, assigned_at, assigned_by)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [data.tag_code, data.item_id ?? null, data.item_id ? new Date() : null, data.assigned_by ?? null]
+    `INSERT INTO ble_tags (tag_code, item_id, assigned_at, assigned_by, name)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [data.tag_code, data.item_id ?? null, data.item_id ? new Date() : null, data.assigned_by ?? null, data.name ?? null]
   );
   return result.rows[0];
 }
-
 
 export async function updateBleTag(id: string, data: { tag_code?: string; name?: string }): Promise<BleTag> {
   const sets: string[] = [];
@@ -183,6 +219,7 @@ export async function updateBleTag(id: string, data: { tag_code?: string; name?:
   if (result.rows.length === 0) throw new NotFoundError("Tag not found");
   return result.rows[0];
 }
+
 export async function assignTagToItem(tagId: string, itemId: string, assignedBy: string): Promise<BleTag> {
   // Unassign any existing tag from this item
   await query(
@@ -550,12 +587,13 @@ export async function runDeviceOfflineJob(): Promise<void> {
 
 // ======================= Presence Queries =======================
 
-export async function listPresenceStates(): Promise<ItemPresenceState[]> {
-  const result = await query<ItemPresenceState>(
-    `SELECT ips.*, i.name as item_name, r.name as room_name
+export async function listPresenceStates(): Promise<any[]> {
+  const result = await query(
+    `SELECT ips.*, i.name as item_name, r.name as room_name, d.label as device_name
      FROM item_presence_state ips
      JOIN items i ON i.id = ips.item_id
      LEFT JOIN rooms r ON r.id = ips.current_room_id
+     LEFT JOIN devices d ON d.id = ips.last_device_id
      ORDER BY i.name`
   );
   return result.rows;
