@@ -269,18 +269,86 @@ export async function assignTagToItem(tagId: string, itemId: string, assignedBy:
 }
 
 export async function unassignTag(tagId: string): Promise<BleTag> {
+  // Get the old item_id before unassigning
+  const oldResult = await query<{ item_id: string | null }>(
+    'SELECT item_id FROM ble_tags WHERE id = $1',
+    [tagId]
+  );
+  if (oldResult.rows.length === 0) throw new NotFoundError('BLE tag not found');
+
+  const oldItemId = oldResult.rows[0].item_id;
+
   const result = await query<BleTag>(
     `UPDATE ble_tags
      SET item_id = NULL, assigned_at = NULL, assigned_by = NULL
      WHERE id = $1 RETURNING *`,
     [tagId]
   );
-  if (result.rows.length === 0) throw new NotFoundError('BLE tag not found');
+
+  // Reset presence state for the previously assigned item
+  if (oldItemId) {
+    await query(
+      `UPDATE item_presence_state
+       SET presence_status = 'unknown',
+           current_room_id = NULL,
+           last_device_id = NULL,
+           last_rssi = NULL,
+           missing_since = NULL,
+           updated_at = NOW()
+       WHERE item_id = $1`,
+      [oldItemId]
+    );
+
+    await query(
+      `INSERT INTO item_location_history
+        (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
+       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag unassigned from item')`,
+      [oldItemId]
+    );
+  }
+
   return result.rows[0];
 }
 
 export async function softDeleteBleTag(id: string): Promise<void> {
-  await query(`UPDATE ble_tags SET is_active = false WHERE id = $1`, [id]);
+  // Get the tag info first (what item it's assigned to)
+  const tagResult = await query<{ item_id: string | null; tag_code: string }>(
+    `SELECT item_id, tag_code FROM ble_tags WHERE id = $1 AND is_active = true`,
+    [id]
+  );
+  if (tagResult.rows.length === 0) return;
+
+  const tag = tagResult.rows[0];
+
+  // Reset presence state for the previously assigned item
+  if (tag.item_id) {
+    await query(
+      `UPDATE item_presence_state
+       SET presence_status = 'unknown',
+           current_room_id = NULL,
+           last_device_id = NULL,
+           last_rssi = NULL,
+           missing_since = NULL,
+           updated_at = NOW()
+       WHERE item_id = $1`,
+      [tag.item_id]
+    );
+
+    await query(
+      `INSERT INTO item_location_history
+        (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
+       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag deleted — unassigned from item')`,
+      [tag.item_id]
+    );
+  }
+
+  // Soft-delete the tag: clear assignment and mark inactive
+  await query(
+    `UPDATE ble_tags
+     SET is_active = false, item_id = NULL, assigned_at = NULL, assigned_by = NULL
+     WHERE id = $1`,
+    [id]
+  );
 }
 
 // ======================= Presence State =======================
