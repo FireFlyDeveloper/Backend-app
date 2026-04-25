@@ -26,7 +26,7 @@ function toDeviceResponse(row: any): DeviceResponse {
     last_seen: row.last_heartbeat ? new Date(row.last_heartbeat).toISOString() : null,
     firmware_version: row.firmware_version || null,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : (row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()),
   };
 }
 
