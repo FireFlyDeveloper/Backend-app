@@ -254,6 +254,15 @@ export async function softDeleteDocument(id: string): Promise<void> {
   if (result.rowCount === 0) throw new NotFoundError('Document not found');
 }
 
+export async function renameDocument(id: string, name: string): Promise<Document> {
+  const result = await query(
+    `UPDATE documents SET name = $1, updated_at = now() WHERE id = $2 AND deleted_at IS NULL RETURNING *`,
+    [name, id]
+  );
+  if (result.rows.length === 0) throw new NotFoundError('Document not found');
+  return result.rows[0];
+}
+
 // --- Versions ---
 
 export async function createDocumentVersion(data: {
@@ -351,6 +360,26 @@ export async function listDocumentActivity(documentId: string): Promise<Document
     [documentId]
   );
   return result.rows;
+}
+
+export async function searchDocuments(queryStr: string, userId: string, userRoles: string[], isAdmin: boolean): Promise<Document[]> {
+  const searchPattern = `%${queryStr}%`;
+  const result = await query(
+    `SELECT * FROM documents
+     WHERE deleted_at IS NULL AND name ILIKE $1
+     ORDER BY name`,
+    [searchPattern]
+  );
+
+  if (isAdmin) return result.rows;
+
+  // Filter by permission for non-admins
+  const accessible: Document[] = [];
+  for (const doc of result.rows) {
+    const perm = await resolveDocumentPermission(userId, userRoles, isAdmin, doc.id);
+    if (perm) accessible.push(doc);
+  }
+  return accessible;
 }
 
 // --- Storage helpers ---

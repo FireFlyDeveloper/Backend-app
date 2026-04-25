@@ -33,6 +33,7 @@ export interface SafeUser {
   is_active: boolean;
   created_at: Date;
   roles: string[];
+  can_checkout_quantifiable: boolean;
 }
 
 // --- Document Types ---

@@ -6,7 +6,8 @@ import { NotFoundError, ConflictError } from '../utils/errors';
 export async function listUsers(): Promise<SafeUser[]> {
   const result = await query(
     `SELECT u.id, u.email, u.display_name, u.is_active, u.created_at,
-      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles
+      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+      BOOL_OR(r.can_checkout_quantifiable) as can_checkout_quantifiable
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
@@ -21,13 +22,15 @@ export async function listUsers(): Promise<SafeUser[]> {
     is_active: r.is_active,
     created_at: r.created_at,
     roles: r.roles || [],
+    can_checkout_quantifiable: r.can_checkout_quantifiable || false,
   }));
 }
 
 export async function getUserById(id: string): Promise<SafeUser> {
   const result = await query(
     `SELECT u.id, u.email, u.display_name, u.is_active, u.created_at,
-      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles
+      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+      BOOL_OR(r.can_checkout_quantifiable) as can_checkout_quantifiable
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
@@ -44,6 +47,7 @@ export async function getUserById(id: string): Promise<SafeUser> {
     is_active: r.is_active,
     created_at: r.created_at,
     roles: r.roles || [],
+    can_checkout_quantifiable: r.can_checkout_quantifiable || false,
   };
 }
 
@@ -79,6 +83,7 @@ export async function createUser(data: {
     is_active: r.is_active,
     created_at: r.created_at,
     roles: [],
+    can_checkout_quantifiable: false,
   };
 }
 

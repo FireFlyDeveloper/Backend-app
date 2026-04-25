@@ -9,6 +9,7 @@ import {
   putUnassignTag,
   deleteBleTag,
   getPresence,
+  getPresenceDetailController,
   getHistory,
 } from '../controllers/bleController';
 import {
@@ -46,12 +47,14 @@ router.get('/tags/:id', authenticate, requireRoles('admin', 'staff'), getBleTag)
 router.post('/tags', authenticate, requireAdmin, postBleTag);
 router.patch('/tags/:id', authenticate, requireAdmin, patchBleTag);
 router.patch('/tags/:id/assign', authenticate, requireAdmin, putAssignTag);
+router.post('/tags/:id/assign', authenticate, requireAdmin, putAssignTag);
 router.patch('/tags/:id/unassign', authenticate, requireAdmin, putUnassignTag);
+router.post('/tags/:id/unassign', authenticate, requireAdmin, putUnassignTag);
 router.delete('/tags/:id', authenticate, requireAdmin, deleteBleTag);
 
 // ─── Presence & History ─────────────────────────────────
 router.get('/presence', authenticate, requireRoles('admin', 'staff'), getPresence);
-router.get('/presence/:itemId', authenticate, requireRoles('admin', 'staff'), getHistory);
+router.get('/presence/:itemId', authenticate, requireRoles('admin', 'staff'), getPresenceDetailController);
 router.get('/history/:itemId', authenticate, requireRoles('admin', 'staff'), getHistory);
 
 export default router;

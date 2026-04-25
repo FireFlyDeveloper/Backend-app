@@ -229,7 +229,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   building    TEXT,
   floor       INT,
   description TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at  TIMESTAMPTZ
 );
 
 COMMENT ON TABLE rooms IS 'Physical rooms for trackable item presence tracking.';

@@ -10,6 +10,7 @@ import {
   softDeleteBleTag,
   listPresenceStates,
   getLocationHistory,
+  getPresenceDetail,
 } from '../services/bleService';
 import { ValidationError } from '../utils/errors';
 
@@ -114,6 +115,15 @@ export async function getPresence(req: AuthRequest, res: Response, next: NextFun
       device_name: s.device_name,
     }));
     res.json({ presence });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPresenceDetailController(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const detail = await getPresenceDetail(req.params.itemId as string);
+    res.json(detail);
   } catch (err) {
     next(err);
   }

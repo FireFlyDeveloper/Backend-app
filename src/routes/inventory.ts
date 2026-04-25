@@ -7,6 +7,7 @@ import {
   deleteItem,
   getLots,
   postLot,
+  patchLot,
   postCheckout,
   getCheckouts,
   getCheckout,
@@ -30,6 +31,7 @@ router.delete('/items/:id', deleteItem);
 // Lots
 router.get('/items/:id/lots', getLots);
 router.post('/items/:id/lots', postLot);
+router.patch('/lots/:lotId', patchLot);
 
 // Checkout
 router.post('/checkout', postCheckout);

@@ -33,12 +33,12 @@ function toDeviceResponse(row: any): DeviceResponse {
 // ======================= Rooms =======================
 
 export async function listRooms(): Promise<Room[]> {
-  const result = await query<Room>('SELECT * FROM rooms ORDER BY name');
+  const result = await query<Room>('SELECT * FROM rooms WHERE deleted_at IS NULL ORDER BY name');
   return result.rows;
 }
 
 export async function getRoomById(id: string): Promise<Room> {
-  const result = await query<Room>('SELECT * FROM rooms WHERE id = $1', [id]);
+  const result = await query<Room>('SELECT * FROM rooms WHERE id = $1 AND deleted_at IS NULL', [id]);
   if (result.rows.length === 0) throw new NotFoundError('Room not found');
   return result.rows[0];
 }
@@ -221,7 +221,14 @@ export async function updateBleTag(id: string, data: { tag_code?: string; name?:
 }
 
 export async function assignTagToItem(tagId: string, itemId: string, assignedBy: string): Promise<BleTag> {
-  // Unassign any existing tag from this item
+  // Find the item this tag is currently assigned to (for Rule 5 cleanup)
+  const oldTagResult = await query<{ item_id: string | null }>(
+    'SELECT item_id FROM ble_tags WHERE id = $1',
+    [tagId]
+  );
+  const oldItemId = oldTagResult.rows[0]?.item_id ?? null;
+
+  // Unassign any existing tag from the NEW item (one tag per item)
   await query(
     `UPDATE ble_tags SET item_id = NULL, assigned_at = NULL, assigned_by = NULL
      WHERE item_id = $1 AND id != $2`,
@@ -235,6 +242,29 @@ export async function assignTagToItem(tagId: string, itemId: string, assignedBy:
     [itemId, assignedBy, tagId]
   );
   if (result.rows.length === 0) throw new NotFoundError('BLE tag not found');
+
+  // Rule 5: Reset presence state for the OLD item when tag is reassigned
+  if (oldItemId && oldItemId !== itemId) {
+    await query(
+      `UPDATE item_presence_state
+       SET presence_status = 'unknown',
+           current_room_id = NULL,
+           last_device_id = NULL,
+           last_rssi = NULL,
+           missing_since = NULL,
+           updated_at = NOW()
+       WHERE item_id = $1`,
+      [oldItemId]
+    );
+
+    await query(
+      `INSERT INTO item_location_history
+         (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
+       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag reassigned to another item')`,
+      [oldItemId]
+    );
+  }
+
   return result.rows[0];
 }
 
@@ -599,9 +629,12 @@ export async function listPresenceStates(): Promise<any[]> {
   return result.rows;
 }
 
-export async function getLocationHistory(itemId: string, limit = 100): Promise<ItemLocationHistory[]> {
-  const result = await query<ItemLocationHistory>(
-    `SELECT ilh.*, r.name as room_name, d.device_code
+export async function getLocationHistory(itemId: string, limit = 100): Promise<any[]> {
+  const result = await query(
+    `SELECT ilh.id, ilh.item_id, ilh.room_id, r.name as room_name,
+            ilh.device_id, d.device_code as device_name,
+            ilh.presence_status, ilh.rssi, ilh.conflict_meta,
+            ilh.recorded_at as detected_at
      FROM item_location_history ilh
      LEFT JOIN rooms r ON r.id = ilh.room_id
      LEFT JOIN devices d ON d.id = ilh.device_id
@@ -611,4 +644,43 @@ export async function getLocationHistory(itemId: string, limit = 100): Promise<I
     [itemId, limit]
   );
   return result.rows;
+}
+
+export async function getPresenceDetail(itemId: string): Promise<any> {
+  const stateResult = await query(
+    `SELECT ips.*, i.name as item_name, r.name as room_name, d.device_code as device_name
+     FROM item_presence_state ips
+     JOIN items i ON i.id = ips.item_id
+     LEFT JOIN rooms r ON r.id = ips.current_room_id
+     LEFT JOIN devices d ON d.id = ips.last_device_id
+     WHERE ips.item_id = $1`,
+    [itemId]
+  );
+
+  const historyResult = await query(
+    `SELECT ilh.id, ilh.item_id, ilh.room_id, r.name as room_name,
+            ilh.device_id, d.device_code as device_name,
+            ilh.presence_status, ilh.rssi, ilh.conflict_meta,
+            ilh.recorded_at as detected_at
+     FROM item_location_history ilh
+     LEFT JOIN rooms r ON r.id = ilh.room_id
+     LEFT JOIN devices d ON d.id = ilh.device_id
+     WHERE ilh.item_id = $1
+     ORDER BY ilh.recorded_at DESC
+     LIMIT 100`,
+    [itemId]
+  );
+
+  const state = stateResult.rows[0];
+  return {
+    item_id: itemId,
+    item_name: state?.item_name || null,
+    room_id: state?.current_room_id || null,
+    room_name: state?.room_name || null,
+    status: state?.presence_status || 'unknown',
+    last_seen: state?.last_seen_at || null,
+    device_id: state?.last_device_id || null,
+    device_name: state?.device_name || null,
+    history: historyResult.rows,
+  };
 }

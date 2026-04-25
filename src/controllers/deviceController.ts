@@ -14,6 +14,7 @@ import {
   getRoomById,
   createRoom,
 } from '../services/bleService';
+import { processBleScan, recordDeviceHeartbeat } from '../services/bleService';
 import { ValidationError } from '../utils/errors';
 
 // --- Rooms ---
@@ -150,6 +151,34 @@ export async function deleteDevice(req: AuthRequest, res: Response, next: NextFu
   try {
     await softDeleteDevice(req.params.id as string);
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- REST Ingestion (mirror of MQTT handlers) ---
+
+export async function postDeviceEvent(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { device_code, tag_code, rssi } = req.body;
+    if (!device_code || !tag_code || typeof rssi !== 'number') {
+      throw new ValidationError('device_code, tag_code, and rssi are required');
+    }
+    await processBleScan({ device_code, tag_code, rssi });
+    res.status(202).json({ message: 'Event accepted' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postDeviceHeartbeat(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { device_code } = req.body;
+    if (!device_code) {
+      throw new ValidationError('device_code is required');
+    }
+    await recordDeviceHeartbeat(device_code);
+    res.status(202).json({ message: 'Heartbeat accepted' });
   } catch (err) {
     next(err);
   }

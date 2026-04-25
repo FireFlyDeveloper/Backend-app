@@ -25,31 +25,39 @@ export async function listItems(filters: {
   category?: string;
   status?: string;
   search?: string;
+  room?: string;
 }): Promise<Item[]> {
-  const conditions: string[] = ['deleted_at IS NULL'];
+  const conditions: string[] = ['i.deleted_at IS NULL'];
   const values: any[] = [];
   let idx = 1;
 
   if (filters.type) {
-    conditions.push(`item_type = $${idx++}`);
+    conditions.push(`i.item_type = $${idx++}`);
     values.push(filters.type);
   }
   if (filters.category) {
-    conditions.push(`category = $${idx++}`);
+    conditions.push(`i.category = $${idx++}`);
     values.push(filters.category);
   }
   if (filters.status) {
-    conditions.push(`status = $${idx++}`);
+    conditions.push(`i.status = $${idx++}`);
     values.push(filters.status);
   }
   if (filters.search) {
-    conditions.push(`(name ILIKE $${idx} OR description ILIKE $${idx})`);
+    conditions.push(`(i.name ILIKE $${idx} OR i.description ILIKE $${idx})`);
     values.push(`%${filters.search}%`);
     idx++;
   }
 
+  let joinClause = '';
+  if (filters.room) {
+    joinClause = `JOIN item_presence_state ips ON ips.item_id = i.id`;
+    conditions.push(`ips.current_room_id = $${idx++}`);
+    values.push(filters.room);
+  }
+
   const result = await query(
-    `SELECT * FROM items WHERE ${conditions.join(' AND ')} ORDER BY name`,
+    `SELECT i.* FROM items i ${joinClause} WHERE ${conditions.join(' AND ')} ORDER BY i.name`,
     values
   );
   return result.rows;
@@ -193,7 +201,52 @@ export async function createLot(data: {
   }
 }
 
-// --- Checkout ---
+export async function updateLot(
+  id: string,
+  data: {
+    lot_code?: string;
+    quantity_total?: number;
+    purchased_at?: string | null;
+    expires_at?: string | null;
+    notes?: string | null;
+  }
+): Promise<ItemLot> {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let idx = 1;
+
+  if (data.lot_code !== undefined) {
+    sets.push(`lot_code = $${idx++}`);
+    values.push(data.lot_code);
+  }
+  if (data.quantity_total !== undefined) {
+    sets.push(`quantity_total = $${idx++}`);
+    values.push(data.quantity_total);
+  }
+  if (data.purchased_at !== undefined) {
+    sets.push(`purchased_at = $${idx++}`);
+    values.push(data.purchased_at);
+  }
+  if (data.expires_at !== undefined) {
+    sets.push(`expires_at = $${idx++}`);
+    values.push(data.expires_at);
+  }
+  if (data.notes !== undefined) {
+    sets.push(`notes = $${idx++}`);
+    values.push(data.notes);
+  }
+  if (sets.length === 0) throw new ValidationError('No fields to update');
+
+  sets.push(`updated_at = now()`);
+  values.push(id);
+
+  const result = await query(
+    `UPDATE item_lots SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    values
+  );
+  if (result.rows.length === 0) throw new NotFoundError('Lot not found');
+  return result.rows[0];
+}
 
 export interface CheckoutLine {
   lot_id: string;
@@ -308,6 +361,7 @@ export async function getCheckoutById(id: string): Promise<{
 export async function listCheckouts(filters: {
   userId?: string;
   status?: string;
+  itemId?: string;
 }): Promise<CheckoutTransaction[]> {
   const conditions: string[] = [];
   const values: any[] = [];
@@ -322,9 +376,16 @@ export async function listCheckouts(filters: {
     values.push(filters.status);
   }
 
+  let joinClause = '';
+  if (filters.itemId) {
+    joinClause = `JOIN checkout_transaction_items cti ON cti.transaction_id = ct.id`;
+    conditions.push(`cti.item_id = $${idx++}`);
+    values.push(filters.itemId);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await query(
-    `SELECT * FROM checkout_transactions ${whereClause} ORDER BY created_at DESC`,
+    `SELECT DISTINCT ct.* FROM checkout_transactions ct ${joinClause} ${whereClause} ORDER BY ct.created_at DESC`,
     values
   );
   return result.rows;

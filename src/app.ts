@@ -36,6 +36,15 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/audit-logs', auditRoutes);
 app.use('/reports', reportRoutes);
 
+// Route aliases for spec compliance
+app.get('/inventory', (req, res) => res.redirect(307, '/items'));
+app.get('/inventory/:id/lots', (req, res) => res.redirect(307, `/items/${req.params.id}/lots`));
+app.get('/trackable/:id/state', (req, res) => res.redirect(307, `/ble/presence/${req.params.id}`));
+app.get('/trackable/:id/history', (req, res) => res.redirect(307, `/ble/history/${req.params.id}`));
+app.use('/ble-tags', (req, res) => res.redirect(307, '/ble/tags' + req.url));
+app.use('/rooms', (req, res) => res.redirect(307, '/ble/rooms' + req.url));
+app.get('/checkout/history', (req, res) => res.redirect(307, '/checkout'));
+
 app.get('/health', async (_req, res) => {
   try {
     const dbResult = await query('SELECT 1 as ok');

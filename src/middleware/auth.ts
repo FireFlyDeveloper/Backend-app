@@ -20,7 +20,8 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
     const userResult = await query(
       `SELECT u.id, u.email, u.display_name, u.is_active, u.created_at,
-        ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles
+        ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+        BOOL_OR(r.can_checkout_quantifiable) as can_checkout_quantifiable
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
        LEFT JOIN roles r ON r.id = ur.role_id
@@ -45,6 +46,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       is_active: row.is_active,
       created_at: row.created_at,
       roles: row.roles || [],
+      can_checkout_quantifiable: row.can_checkout_quantifiable || false,
     };
 
     next();

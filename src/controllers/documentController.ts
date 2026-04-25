@@ -14,6 +14,7 @@ import {
   getDocumentById,
   createDocument,
   softDeleteDocument,
+  renameDocument,
   createDocumentVersion,
   listDocumentVersions,
   updateDocumentVersion,
@@ -27,6 +28,7 @@ import {
   listDocumentActivity,
   getStoragePath,
   ensureStorageDir,
+  searchDocuments,
 } from '../services/documentService';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors';
 import { PermissionLevel } from '../types';
@@ -279,6 +281,24 @@ export async function deleteDocument(req: AuthRequest, res: Response, next: Next
   }
 }
 
+export async function patchDocument(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    const doc = await getDocumentById(req.params.id as string);
+    const perm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
+    if (!perm || (perm !== 'editor' && perm !== 'manager' && !ctx.isAdmin)) {
+      throw new ForbiddenError('Editor permission required to rename');
+    }
+    const { name } = req.body;
+    if (!name || !name.trim()) throw new ValidationError('name is required');
+    const updated = await renameDocument(req.params.id as string, name.trim());
+    await logActivity({ document_id: doc.id, actor_id: ctx.userId, action: 'rename', metadata: { name } });
+    res.json({ document: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getDocumentVersions(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const ctx = getUserContext(req);
@@ -300,6 +320,20 @@ export async function getDocumentActivity(req: AuthRequest, res: Response, next:
     if (!perm && !ctx.isAdmin) throw new ForbiddenError();
     const activity = await listDocumentActivity(req.params.id as string);
     res.json({ activity });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getDocumentSearch(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    const q = req.query.q as string;
+    if (!q || q.trim().length === 0) {
+      throw new ValidationError('q parameter is required');
+    }
+    const documents = await searchDocuments(q.trim(), ctx.userId, ctx.userRoles, ctx.isAdmin);
+    res.json({ documents });
   } catch (err) {
     next(err);
   }

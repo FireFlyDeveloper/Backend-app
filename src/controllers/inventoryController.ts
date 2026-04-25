@@ -8,6 +8,7 @@ import {
   softDeleteItem,
   listLotsByItem,
   createLot,
+  updateLot,
   createCheckout,
   getCheckoutById,
   listCheckouts,
@@ -33,12 +34,13 @@ function getUserContext(req: AuthRequest) {
 
 export async function getItems(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { type, category, status, search } = req.query;
+    const { type, category, status, search, room } = req.query;
     const items = await listItems({
       type: type as string | undefined,
       category: category as string | undefined,
       status: status as string | undefined,
       search: search as string | undefined,
+      room: room as string | undefined,
     });
     res.json({ items });
   } catch (err) {
@@ -189,6 +191,35 @@ export async function postLot(req: AuthRequest, res: Response, next: NextFunctio
   }
 }
 
+export async function patchLot(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    if (!ctx.isAdmin && !ctx.isStaff) {
+      throw new ForbiddenError('Only admin or staff can update lots');
+    }
+
+    const { lot_code, quantity_total, purchased_at, expires_at, notes } = req.body;
+    const lot = await updateLot(req.params.lotId as string, {
+      lot_code,
+      quantity_total: quantity_total !== undefined ? Number(quantity_total) : undefined,
+      purchased_at,
+      expires_at,
+      notes,
+    });
+
+    await logInventoryActivity({
+      actor_id: ctx.userId,
+      action: 'update_lot',
+      entity_type: 'item_lot',
+      entity_id: lot.id,
+    });
+
+    res.json({ lot });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // --- Checkout ---
 
 export async function postCheckout(req: AuthRequest, res: Response, next: NextFunction) {
@@ -229,7 +260,7 @@ export async function postCheckout(req: AuthRequest, res: Response, next: NextFu
 export async function getCheckouts(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const ctx = getUserContext(req);
-    const { status, user_id } = req.query;
+    const { status, user_id, item_id } = req.query;
 
     // Students can only see their own checkouts
     const filterUserId = ctx.isAdmin || ctx.isStaff
@@ -239,6 +270,7 @@ export async function getCheckouts(req: AuthRequest, res: Response, next: NextFu
     const transactions = await listCheckouts({
       userId: filterUserId,
       status: status as string | undefined,
+      itemId: item_id as string | undefined,
     });
     res.json({ transactions });
   } catch (err) {
