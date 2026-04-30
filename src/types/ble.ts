@@ -7,6 +7,7 @@ export interface Room {
   floor: number | null;
   description: string | null;
   created_at: Date;
+  deleted_at: Date | null;
 }
 
 export interface Device {
