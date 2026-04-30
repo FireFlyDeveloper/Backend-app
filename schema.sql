@@ -196,6 +196,7 @@ EXECUTE FUNCTION update_updated_at_column();
 CREATE TABLE IF NOT EXISTS items (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_type   TEXT NOT NULL CHECK (item_type IN ('trackable', 'quantifiable')),
+  sku         TEXT UNIQUE,
   name        TEXT NOT NULL,
   category    TEXT,
   description TEXT,
@@ -212,6 +213,7 @@ COMMENT ON TABLE items IS 'Master inventory items: trackable (BLE) or quantifiab
 CREATE INDEX IF NOT EXISTS idx_items_type ON items(item_type) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_items_status ON items(status) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_sku ON items(sku) WHERE sku IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TRIGGER trg_items_updated_at
 BEFORE UPDATE ON items
