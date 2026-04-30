@@ -121,8 +121,7 @@ export async function createDevice(data: { device_code: string; room_id?: string
              name = $2,
              label = $3,
              rssi_range = $4,
-             offline_since = NULL,
-             updated_at = NOW()
+             offline_since = NULL
          WHERE id = $5 RETURNING *`,
         [data.room_id ?? null, data.name ?? null, data.label ?? null, data.rssi_range ?? -70, existing.id]
       );
