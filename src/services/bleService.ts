@@ -603,7 +603,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
 
   // Rule 6: Unregistered tag logging
   if (!tag) {
-    broadcast({ type: 'unregistered_tag', tag_code, device_code, rssi, room_id: device.room_id, timestamp: new Date().toISOString() });
+    broadcast({ type: 'unregistered_tag', tag_id: tag_code, device_id: device_code, device_name: device.label || device.device_code, room_id: device.room_id, room_name: null, rssi, timestamp: new Date().toISOString() });
     return;
   }
 
@@ -711,7 +711,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
       rssi,
       conflict_meta: { ...scanMeta, rule: 1, note: `item arrived to ${device.room_id}` },
     });
-    broadcast({ type: 'item_location', item_id: tag.item_id, room_id: device.room_id, presence_status: 'present', rssi, timestamp: new Date().toISOString() });
+    broadcast({ type: 'item_location', item_id: tag.item_id, room_id: device.room_id, presence_status: 'present', rssi, device_id: device.id, device_name: device.label || device.device_code, timestamp: new Date().toISOString() });
     return;
   }
 
@@ -774,6 +774,8 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
     room_id: device.room_id,
     presence_status: 'present',
     rssi,
+    device_id: device.id,
+    device_name: device.label || device.device_code,
     timestamp: new Date().toISOString(),
   });
 }
@@ -816,7 +818,7 @@ export async function runMissingDetectionJob(): Promise<void> {
       },
     });
 
-    broadcast({ type: 'item_missing', item_id: row.item_id, timestamp: new Date().toISOString() });
+    broadcast({ type: 'item_missing', item_id: row.item_id, last_room_id: presence?.current_room_id ?? null, last_seen: presence?.last_seen_at ? new Date(presence.last_seen_at).toISOString() : null, timestamp: new Date().toISOString() });
   }
 
   // Clean up ghost presence states where device had no room assignment
@@ -859,7 +861,7 @@ export async function runDeviceOfflineJob(): Promise<void> {
       },
     });
 
-    broadcast({ type: 'device_offline', device_id: device.id, device_code: device.device_code, timestamp: new Date().toISOString() });
+    broadcast({ type: 'device_offline', device_id: device.id, device_name: device.label || device.device_code, room_id: device.room_id, last_seen: device.last_heartbeat ? new Date(device.last_heartbeat).toISOString() : null, timestamp: new Date().toISOString() });
   }
 }
 
