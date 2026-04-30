@@ -11,6 +11,72 @@ function getUserContext(req: AuthRequest) {
   return { userId: user.id, isAdmin, isStaff };
 }
 
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+function formatDescription(
+  action: string,
+  entityType: string | null,
+  metadata: Record<string, unknown> | null
+): string {
+  if (!metadata || typeof metadata !== 'object') {
+    return `${capitalize(action)} ${entityType || 'record'}`;
+  }
+
+  const meta = metadata as Record<string, unknown>;
+  const name =
+    (meta.name as string) ||
+    (meta.title as string) ||
+    (meta.filename as string) ||
+    (meta.device_code as string) ||
+    (meta.username as string) ||
+    (meta.email as string);
+
+  const itemType = meta.item_type ? ` (${meta.item_type})` : '';
+  const status = meta.status ? ` — ${meta.status}` : '';
+  const notes = meta.notes ? `: ${meta.notes}` : '';
+  const size =
+    typeof meta.size === 'number'
+      ? ` (${(meta.size / 1024).toFixed(1)} KB${meta.mime_type ? `, ${meta.mime_type}` : ''})`
+      : meta.mime_type
+        ? ` (${meta.mime_type})`
+        : '';
+
+  switch (true) {
+    case action === 'create' && entityType === 'item':
+      return `Created item${name ? `: ${name}` : ''}${itemType}`;
+    case action === 'update' && entityType === 'item':
+      return `Updated item${name ? `: ${name}` : ''}`;
+    case action === 'delete' && entityType === 'item':
+      return `Deleted item${name ? `: ${name}` : ''}`;
+    case action === 'checkout':
+      return `Checkout transaction${status}${notes}`;
+    case action === 'upload' || (action === 'create' && entityType === 'document'):
+      return `Uploaded document${name ? `: ${name}` : ''}${size}`;
+    case action === 'download':
+      return `Downloaded document${name ? `: ${name}` : ''}`;
+    case action === 'create' && entityType === 'user':
+      return `Created user${name ? `: ${name}` : ''}`;
+    case action === 'update' && entityType === 'user':
+      return `Updated user${name ? `: ${name}` : ''}`;
+    case action === 'delete' && entityType === 'user':
+      return `Deleted user${name ? `: ${name}` : ''}`;
+    case action === 'create' && entityType === 'device':
+      return `Registered device${name ? `: ${name}` : ''}`;
+    case action === 'update' && entityType === 'device':
+      return `Updated device${name ? `: ${name}` : ''}`;
+    case action === 'delete' && entityType === 'device':
+      return `Removed device${name ? `: ${name}` : ''}`;
+    case action === 'login':
+      return `User logged in${name ? `: ${name}` : ''}`;
+    case action === 'logout':
+      return `User logged out${name ? `: ${name}` : ''}`;
+    default:
+      return `${capitalize(action)} ${entityType || 'record'}${name ? `: ${name}` : ''}`;
+  }
+}
+
 export async function getDashboardStats(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const ctx = getUserContext(req);
@@ -92,7 +158,7 @@ export async function getRecentActivity(req: AuthRequest, res: Response, next: N
       entityType: r.entity_type || r.source,
       action: r.action,
       actorName: r.actor_id || 'System',
-      description: r.metadata ? JSON.stringify(r.metadata) : '',
+      description: r.metadata ? formatDescription(r.action, r.entity_type, r.metadata) : '',
       createdAt: r.created_at,
     }));
 
