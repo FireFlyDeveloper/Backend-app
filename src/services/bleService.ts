@@ -635,6 +635,12 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
     return;
   }
 
+  // Guard: if the scanning device isn't assigned to a room, we can't determine location.
+  // Log the raw event (already done above) but don't update presence state.
+  if (!device.room_id) {
+    return;
+  }
+
   // Current presence state
   const currentPresence = await getPresenceByItemId(tag.item_id);
   const deviceRssiRange = device.rssi_range ?? -70;
@@ -802,6 +808,17 @@ export async function runMissingDetectionJob(): Promise<void> {
 
     broadcast({ type: 'item_missing', item_id: row.item_id, timestamp: new Date().toISOString() });
   }
+
+  // Clean up ghost presence states where device had no room assignment
+  await query(
+    `UPDATE item_presence_state
+     SET presence_status = 'unknown',
+         last_device_id = NULL,
+         last_rssi = NULL,
+         missing_since = NULL,
+         updated_at = NOW()
+     WHERE current_room_id IS NULL`
+  );
 }
 
 export async function runDeviceOfflineJob(): Promise<void> {
@@ -842,9 +859,10 @@ export async function listPresenceStates(): Promise<any[]> {
   const result = await query(
     `SELECT ips.*, i.name as item_name, r.name as room_name, d.label as device_name
      FROM item_presence_state ips
-     JOIN items i ON i.id = ips.item_id
-     LEFT JOIN rooms r ON r.id = ips.current_room_id
+     JOIN items i ON i.id = ips.item_id AND i.deleted_at IS NULL
+     LEFT JOIN rooms r ON r.id = ips.current_room_id AND r.deleted_at IS NULL
      LEFT JOIN devices d ON d.id = ips.last_device_id
+     WHERE ips.current_room_id IS NOT NULL
      ORDER BY i.name`
   );
   return result.rows;
