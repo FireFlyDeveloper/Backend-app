@@ -16,6 +16,8 @@ import {
   cancelCheckout,
   scanCode,
   logInventoryActivity,
+  approveCheckout,
+  rejectCheckout,
   CheckoutLine,
   ReturnLine,
 } from '../services/inventoryService';
@@ -243,14 +245,14 @@ export async function postCheckout(req: AuthRequest, res: Response, next: NextFu
       throw new ForbiddenError('Checkout permission required');
     }
 
-    const result = await createCheckout(ctx.userId, checkoutLines, notes);
+    const result = await createCheckout(ctx.userId, checkoutLines, notes, ctx.isAdmin || ctx.isStaff);
 
     await logInventoryActivity({
       actor_id: ctx.userId,
-      action: 'checkout',
+      action: ctx.isAdmin || ctx.isStaff ? 'checkout' : 'checkout_request',
       entity_type: 'checkout_transaction',
       entity_id: result.transaction.id,
-      metadata: { items: result.items.map((i) => ({ lot_id: i.lot_id, qty: i.quantity_out })) },
+      metadata: { items: result.items.map((i) => ({ lot_id: i.lot_id, qty: i.quantity_out })), status: result.transaction.status },
     });
 
     res.status(201).json(result);
@@ -291,6 +293,52 @@ export async function getCheckout(req: AuthRequest, res: Response, next: NextFun
     }
 
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postApproveCheckout(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    if (!ctx.isAdmin && !ctx.isStaff) {
+      throw new ForbiddenError('Only admin or staff can approve checkouts');
+    }
+
+    const checkoutId = req.params.id as string;
+    const transaction = await approveCheckout(checkoutId, ctx.userId);
+
+    await logInventoryActivity({
+      actor_id: ctx.userId,
+      action: 'approve_checkout',
+      entity_type: 'checkout_transaction',
+      entity_id: checkoutId,
+    });
+
+    res.json({ transaction });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function postRejectCheckout(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    if (!ctx.isAdmin && !ctx.isStaff) {
+      throw new ForbiddenError('Only admin or staff can reject checkouts');
+    }
+
+    const checkoutId = req.params.id as string;
+    const transaction = await rejectCheckout(checkoutId, ctx.userId);
+
+    await logInventoryActivity({
+      actor_id: ctx.userId,
+      action: 'reject_checkout',
+      entity_type: 'checkout_transaction',
+      entity_id: checkoutId,
+    });
+
+    res.json({ transaction });
   } catch (err) {
     next(err);
   }

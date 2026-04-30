@@ -263,11 +263,14 @@ export interface CheckoutLine {
 export async function createCheckout(
   checkedOutBy: string,
   lines: CheckoutLine[],
-  notes?: string
+  notes?: string,
+  isAdminOrStaff: boolean = false
 ): Promise<{ transaction: CheckoutTransaction; items: CheckoutTransactionItem[] }> {
   if (!lines || lines.length === 0) {
     throw new ValidationError('At least one checkout line is required');
   }
+
+  const status = isAdminOrStaff ? 'open' : 'pending_approval';
 
   return withTransaction(async (client) => {
     // Create transaction
@@ -275,7 +278,7 @@ export async function createCheckout(
       `INSERT INTO checkout_transactions (checked_out_by, status, notes)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [checkedOutBy, 'open', notes || null]
+      [checkedOutBy, status, notes || null]
     );
     const transaction: CheckoutTransaction = txnResult.rows[0];
 
@@ -312,21 +315,23 @@ export async function createCheckout(
         throw new ValidationError(`Item ${item.name} is not active`);
       }
 
-      // Stock validation
+      // Stock validation (always validate, even for pending)
       if (lot.quantity_on_hand < line.quantity) {
         throw new ValidationError(
           `Insufficient stock for lot ${lot.lot_code}: available ${lot.quantity_on_hand}, requested ${line.quantity}`
         );
       }
 
-      // Deduct stock
-      await client.query(
-        `UPDATE item_lots
-         SET quantity_on_hand = quantity_on_hand - $1,
-             quantity_out = quantity_out + $1
-         WHERE id = $2`,
-        [line.quantity, line.lot_id]
-      );
+      // Only deduct stock for admin/staff immediate checkouts
+      if (isAdminOrStaff) {
+        await client.query(
+          `UPDATE item_lots
+           SET quantity_on_hand = quantity_on_hand - $1,
+               quantity_out = quantity_out + $1
+           WHERE id = $2`,
+          [line.quantity, line.lot_id]
+        );
+      }
 
       // Create checkout line
       const ctiResult = await client.query(
@@ -363,6 +368,89 @@ export async function getCheckoutById(id: string): Promise<{
   );
 
   return { transaction, items: itemsResult.rows };
+}
+
+export async function approveCheckout(
+  checkoutId: string,
+  approvedBy: string
+): Promise<CheckoutTransaction> {
+  return withTransaction(async (client) => {
+    const txnResult = await client.query(
+      `SELECT * FROM checkout_transactions WHERE id = $1 FOR UPDATE`,
+      [checkoutId]
+    );
+    if (txnResult.rows.length === 0) {
+      throw new NotFoundError('Checkout transaction not found');
+    }
+    const checkout: CheckoutTransaction = txnResult.rows[0];
+
+    if (checkout.status !== 'pending_approval') {
+      throw new ConflictError('Only pending checkouts can be approved');
+    }
+
+    // Deduct stock for each line
+    const itemsResult = await client.query(
+      `SELECT * FROM checkout_transaction_items WHERE transaction_id = $1`,
+      [checkoutId]
+    );
+    for (const cti of itemsResult.rows) {
+      const lotResult = await client.query(
+        `SELECT * FROM item_lots WHERE id = $1 FOR UPDATE`,
+        [cti.lot_id]
+      );
+      const lot: ItemLot = lotResult.rows[0];
+      if (lot.quantity_on_hand < cti.quantity_out) {
+        throw new ConflictError(
+          `Cannot approve: insufficient stock for lot. Available ${lot.quantity_on_hand}, requested ${cti.quantity_out}`
+        );
+      }
+      await client.query(
+        `UPDATE item_lots
+         SET quantity_on_hand = quantity_on_hand - $1,
+             quantity_out = quantity_out + $1
+         WHERE id = $2`,
+        [cti.quantity_out, cti.lot_id]
+      );
+    }
+
+    const updated = await client.query(
+      `UPDATE checkout_transactions
+       SET status = 'open', processed_by = $1, updated_at = now()
+       WHERE id = $2
+       RETURNING *`,
+      [approvedBy, checkoutId]
+    );
+
+    return updated.rows[0];
+  });
+}
+
+export async function rejectCheckout(
+  checkoutId: string,
+  rejectedBy: string
+): Promise<CheckoutTransaction> {
+  const txnResult = await query(
+    `SELECT * FROM checkout_transactions WHERE id = $1`,
+    [checkoutId]
+  );
+  if (txnResult.rows.length === 0) {
+    throw new NotFoundError('Checkout transaction not found');
+  }
+  const checkout: CheckoutTransaction = txnResult.rows[0];
+
+  if (checkout.status !== 'pending_approval') {
+    throw new ConflictError('Only pending checkouts can be rejected');
+  }
+
+  const updated = await query(
+    `UPDATE checkout_transactions
+     SET status = 'rejected', processed_by = $1, updated_at = now()
+     WHERE id = $2
+     RETURNING *`,
+    [rejectedBy, checkoutId]
+  );
+
+  return updated.rows[0];
 }
 
 export async function listCheckouts(filters: {
@@ -544,8 +632,9 @@ export async function cancelCheckout(
     }
     const checkout: CheckoutTransaction = txnResult.rows[0];
 
-    if (checkout.status !== 'open') {
-      throw new ConflictError('Only open checkouts can be cancelled');
+    // Can cancel open or pending_approval checkouts
+    if (checkout.status !== 'open' && checkout.status !== 'pending_approval') {
+      throw new ConflictError('Only open or pending checkouts can be cancelled');
     }
 
     // Check for any returns
@@ -557,19 +646,21 @@ export async function cancelCheckout(
       throw new ConflictError('Cannot cancel checkout with existing returns');
     }
 
-    // Restore all stock
-    const itemsResult = await client.query(
-      `SELECT * FROM checkout_transaction_items WHERE transaction_id = $1`,
-      [checkoutId]
-    );
-    for (const cti of itemsResult.rows) {
-      await client.query(
-        `UPDATE item_lots
-         SET quantity_on_hand = quantity_on_hand + $1,
-             quantity_out = quantity_out - $1
-         WHERE id = $2`,
-        [cti.quantity_out, cti.lot_id]
+    // Restore stock only for already-open checkouts (not pending_approval)
+    if (checkout.status === 'open') {
+      const itemsResult = await client.query(
+        `SELECT * FROM checkout_transaction_items WHERE transaction_id = $1`,
+        [checkoutId]
       );
+      for (const cti of itemsResult.rows) {
+        await client.query(
+          `UPDATE item_lots
+           SET quantity_on_hand = quantity_on_hand + $1,
+               quantity_out = quantity_out - $1
+           WHERE id = $2`,
+          [cti.quantity_out, cti.lot_id]
+        );
+      }
     }
 
     // Mark cancelled

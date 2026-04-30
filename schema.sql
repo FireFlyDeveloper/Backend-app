@@ -340,7 +340,7 @@ CREATE TABLE IF NOT EXISTS checkout_transactions (
   checked_out_by  UUID NOT NULL REFERENCES users(id),
   processed_by    UUID REFERENCES users(id),
   status          TEXT NOT NULL DEFAULT 'open'
-                  CHECK (status IN ('open', 'partially_returned', 'closed', 'cancelled')),
+                  CHECK (status IN ('pending_approval', 'open', 'partially_returned', 'closed', 'cancelled', 'rejected')),
   notes           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()

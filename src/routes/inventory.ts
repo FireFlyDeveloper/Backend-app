@@ -14,6 +14,8 @@ import {
   postReturn,
   postCancel,
   postScan,
+  postApproveCheckout,
+  postRejectCheckout,
 } from '../controllers/inventoryController';
 import { authenticate } from '../middleware/auth';
 
@@ -37,6 +39,8 @@ router.patch('/lots/:lotId', patchLot);
 router.post('/checkout', postCheckout);
 router.get('/checkout', getCheckouts);
 router.get('/checkout/:id', getCheckout);
+router.post('/checkout/:id/approve', postApproveCheckout);
+router.post('/checkout/:id/reject', postRejectCheckout);
 router.post('/checkout/:id/return', postReturn);
 router.post('/checkout/:id/cancel', postCancel);
 
