@@ -44,6 +44,24 @@ export async function getRoomById(id: string): Promise<Room> {
 }
 
 export async function createRoom(data: { name: string; building?: string; floor?: number; description?: string }): Promise<Room> {
+  const existing = await query<Room>('SELECT * FROM rooms WHERE name = $1', [data.name]);
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    if (row.deleted_at) {
+      const result = await query<Room>(
+        `UPDATE rooms
+         SET deleted_at = NULL,
+             building = $1,
+             floor = $2,
+             description = $3
+         WHERE id = $4 RETURNING *`,
+        [data.building ?? null, data.floor ?? null, data.description ?? null, row.id]
+      );
+      return result.rows[0];
+    }
+    throw new ValidationError(`Room name "${data.name}" already exists`);
+  }
+
   const result = await query<Room>(
     `INSERT INTO rooms (name, building, floor, description)
      VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -223,6 +241,30 @@ export async function getBleTagByCode(tag_code: string): Promise<BleTag | null> 
 }
 
 export async function createBleTag(data: { tag_code: string; item_id?: string | null; assigned_by?: string | null; name?: string }): Promise<BleTag> {
+  const existing = await getBleTagByCode(data.tag_code);
+  if (existing) {
+    if (!existing.is_active) {
+      const result = await query<BleTag>(
+        `UPDATE ble_tags
+         SET is_active = true,
+             name = $1,
+             item_id = $2,
+             assigned_at = $3,
+             assigned_by = $4
+         WHERE id = $5 RETURNING *`,
+        [
+          data.name ?? null,
+          data.item_id ?? null,
+          data.item_id ? new Date() : null,
+          data.assigned_by ?? null,
+          existing.id,
+        ]
+      );
+      return result.rows[0];
+    }
+    throw new ValidationError(`Tag code "${data.tag_code}" already exists`);
+  }
+
   const result = await query<BleTag>(
     `INSERT INTO ble_tags (tag_code, item_id, assigned_at, assigned_by, name)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
