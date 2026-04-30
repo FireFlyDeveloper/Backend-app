@@ -64,7 +64,7 @@ export async function postItem(req: AuthRequest, res: Response, next: NextFuncti
       throw new ForbiddenError('Only admin or staff can create items');
     }
 
-    const { item_type, name, category, description, status } = req.body;
+    const { item_type, name, sku, category, description, status } = req.body;
     if (!item_type || !name) {
       throw new ValidationError('item_type and name are required');
     }
@@ -75,6 +75,7 @@ export async function postItem(req: AuthRequest, res: Response, next: NextFuncti
     const item = await createItem({
       item_type,
       name,
+      sku,
       category,
       description,
       status,
@@ -102,9 +103,10 @@ export async function patchItem(req: AuthRequest, res: Response, next: NextFunct
       throw new ForbiddenError('Only admin or staff can update items');
     }
 
-    const { name, category, description, status } = req.body;
+    const { name, sku, category, description, status } = req.body;
     const item = await updateItem(req.params.id as string, {
       name,
+      sku,
       category,
       description,
       status,

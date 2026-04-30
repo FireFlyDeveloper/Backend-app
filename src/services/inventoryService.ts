@@ -44,7 +44,7 @@ export async function listItems(filters: {
     values.push(filters.status);
   }
   if (filters.search) {
-    conditions.push(`(i.name ILIKE $${idx} OR i.description ILIKE $${idx})`);
+    conditions.push(`(i.name ILIKE $${idx} OR i.description ILIKE $${idx} OR i.sku ILIKE $${idx})`);
     values.push(`%${filters.search}%`);
     idx++;
   }
@@ -75,18 +75,20 @@ export async function getItemById(id: string): Promise<Item> {
 export async function createItem(data: {
   item_type: 'trackable' | 'quantifiable';
   name: string;
+  sku?: string | null;
   category?: string;
   description?: string;
   status?: 'active' | 'inactive' | 'maintenance';
   created_by: string;
 }): Promise<Item> {
   const result = await query(
-    `INSERT INTO items (item_type, name, category, description, status, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO items (item_type, name, sku, category, description, status, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       data.item_type,
       data.name,
+      data.sku || null,
       data.category || null,
       data.description || null,
       data.status || 'active',
@@ -100,6 +102,7 @@ export async function updateItem(
   id: string,
   data: {
     name?: string;
+    sku?: string | null;
     category?: string;
     description?: string;
     status?: 'active' | 'inactive' | 'maintenance';
@@ -112,6 +115,10 @@ export async function updateItem(
   if (data.name !== undefined) {
     sets.push(`name = $${idx++}`);
     values.push(data.name);
+  }
+  if (data.sku !== undefined) {
+    sets.push(`sku = $${idx++}`);
+    values.push(data.sku);
   }
   if (data.category !== undefined) {
     sets.push(`category = $${idx++}`);
@@ -594,6 +601,15 @@ export async function scanCode(code: string): Promise<{
     const lot: ItemLot = lotResult.rows[0];
     const item = await getItemById(lot.item_id);
     return { type: 'lot', item, lot };
+  }
+
+  // Try SKU
+  const skuResult = await query(
+    `SELECT * FROM items WHERE sku = $1 AND deleted_at IS NULL`,
+    [code]
+  );
+  if (skuResult.rows.length > 0) {
+    return { type: 'item', item: skuResult.rows[0] };
   }
 
   // Try item name or id
