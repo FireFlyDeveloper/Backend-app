@@ -43,6 +43,7 @@ export async function postBleTag(req: AuthRequest, res: Response, next: NextFunc
 
     const tag = await createBleTag({
       tag_code,
+      name: name || null,
       item_id: item_id || null,
       assigned_by: item_id ? req.user!.id : null,
     });

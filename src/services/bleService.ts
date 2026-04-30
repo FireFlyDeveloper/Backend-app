@@ -216,23 +216,35 @@ export async function markDeviceOffline(id: string): Promise<void> {
   );
 }
 
+function toTagResponse(row: any): any {
+  return {
+    id: row.id,
+    tag_id: row.tag_code,
+    name: row.name || row.tag_code,
+    item_id: row.item_id || null,
+    item_name: row.item_name || null,
+    created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : (row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()),
+  }
+}
+
 // ======================= BLE Tags =======================
 
-export async function listBleTags(): Promise<BleTag[]> {
-  const result = await query<BleTag>(
+export async function listBleTags(): Promise<any[]> {
+  const result = await query(
     `SELECT bt.*, i.name as item_name
      FROM ble_tags bt
      LEFT JOIN items i ON i.id = bt.item_id
      WHERE bt.is_active = true
      ORDER BY bt.tag_code`
   );
-  return result.rows;
+  return result.rows.map(toTagResponse);
 }
 
-export async function getBleTagById(id: string): Promise<BleTag> {
-  const result = await query<BleTag>('SELECT * FROM ble_tags WHERE id = $1', [id]);
+export async function getBleTagById(id: string): Promise<any> {
+  const result = await query('SELECT * FROM ble_tags WHERE id = $1', [id]);
   if (result.rows.length === 0) throw new NotFoundError('BLE tag not found');
-  return result.rows[0];
+  return toTagResponse(result.rows[0]);
 }
 
 export async function getBleTagByCode(tag_code: string): Promise<BleTag | null> {
@@ -240,11 +252,11 @@ export async function getBleTagByCode(tag_code: string): Promise<BleTag | null> 
   return result.rows[0] ?? null;
 }
 
-export async function createBleTag(data: { tag_code: string; item_id?: string | null; assigned_by?: string | null; name?: string }): Promise<BleTag> {
+export async function createBleTag(data: { tag_code: string; item_id?: string | null; assigned_by?: string | null; name?: string }): Promise<any> {
   const existing = await getBleTagByCode(data.tag_code);
   if (existing) {
     if (!existing.is_active) {
-      const result = await query<BleTag>(
+      const result = await query(
         `UPDATE ble_tags
          SET is_active = true,
              name = $1,
@@ -260,20 +272,20 @@ export async function createBleTag(data: { tag_code: string; item_id?: string | 
           existing.id,
         ]
       );
-      return result.rows[0];
+      return toTagResponse(result.rows[0]);
     }
     throw new ValidationError(`Tag code "${data.tag_code}" already exists`);
   }
 
-  const result = await query<BleTag>(
+  const result = await query(
     `INSERT INTO ble_tags (tag_code, item_id, assigned_at, assigned_by, name)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [data.tag_code, data.item_id ?? null, data.item_id ? new Date() : null, data.assigned_by ?? null, data.name ?? null]
   );
-  return result.rows[0];
+  return toTagResponse(result.rows[0]);
 }
 
-export async function updateBleTag(id: string, data: { tag_code?: string; name?: string }): Promise<BleTag> {
+export async function updateBleTag(id: string, data: { tag_code?: string; name?: string }): Promise<any> {
   const sets: string[] = [];
   const values: any[] = [];
   let idx = 1;
@@ -284,15 +296,15 @@ export async function updateBleTag(id: string, data: { tag_code?: string; name?:
   if (sets.length === 0) throw new ValidationError("No fields to update");
   values.push(id);
 
-  const result = await query<BleTag>(
+  const result = await query(
     `UPDATE ble_tags SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
     values
   );
   if (result.rows.length === 0) throw new NotFoundError("Tag not found");
-  return result.rows[0];
+  return toTagResponse(result.rows[0]);
 }
 
-export async function assignTagToItem(tagId: string, itemId: string, assignedBy: string): Promise<BleTag> {
+export async function assignTagToItem(tagId: string, itemId: string, assignedBy: string): Promise<any> {
   // Find the item this tag is currently assigned to (for Rule 5 cleanup)
   const oldTagResult = await query<{ item_id: string | null }>(
     'SELECT item_id FROM ble_tags WHERE id = $1',
@@ -307,7 +319,7 @@ export async function assignTagToItem(tagId: string, itemId: string, assignedBy:
     [itemId, tagId]
   );
 
-  const result = await query<BleTag>(
+  const result = await query(
     `UPDATE ble_tags
      SET item_id = $1, assigned_at = NOW(), assigned_by = $2
      WHERE id = $3 RETURNING *`,
@@ -337,10 +349,10 @@ export async function assignTagToItem(tagId: string, itemId: string, assignedBy:
     );
   }
 
-  return result.rows[0];
+  return toTagResponse(result.rows[0]);
 }
 
-export async function unassignTag(tagId: string): Promise<BleTag> {
+export async function unassignTag(tagId: string): Promise<any> {
   // Get the old item_id before unassigning
   const oldResult = await query<{ item_id: string | null }>(
     'SELECT item_id FROM ble_tags WHERE id = $1',
@@ -350,7 +362,7 @@ export async function unassignTag(tagId: string): Promise<BleTag> {
 
   const oldItemId = oldResult.rows[0].item_id;
 
-  const result = await query<BleTag>(
+  const result = await query(
     `UPDATE ble_tags
      SET item_id = NULL, assigned_at = NULL, assigned_by = NULL
      WHERE id = $1 RETURNING *`,
@@ -379,7 +391,7 @@ export async function unassignTag(tagId: string): Promise<BleTag> {
     );
   }
 
-  return result.rows[0];
+  return toTagResponse(result.rows[0]);
 }
 
 export async function softDeleteBleTag(id: string): Promise<void> {
