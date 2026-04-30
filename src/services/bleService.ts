@@ -788,7 +788,7 @@ export async function runMissingDetectionJob(): Promise<void> {
 
   const result = await query<{ item_id: string }>(
     `SELECT item_id FROM item_presence_state
-     WHERE presence_status = 'present'
+     WHERE presence_status IN ('present', 'transporting')
        AND last_seen_at < $1`,
     [cutoff]
   );
