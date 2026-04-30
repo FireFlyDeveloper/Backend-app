@@ -109,6 +109,28 @@ export async function getDeviceByCode(device_code: string): Promise<Device | nul
 }
 
 export async function createDevice(data: { device_code: string; room_id?: string | null; name?: string; label?: string; rssi_range?: number }): Promise<DeviceResponse> {
+  // Check for existing device_code (including soft-deleted/inactive)
+  const existing = await getDeviceByCode(data.device_code);
+  if (existing) {
+    if (!existing.is_active) {
+      // Reactivate and apply new settings
+      const result = await query<Device>(
+        `UPDATE devices
+         SET is_active = true,
+             room_id = $1,
+             name = $2,
+             label = $3,
+             rssi_range = $4,
+             offline_since = NULL,
+             updated_at = NOW()
+         WHERE id = $5 RETURNING *`,
+        [data.room_id ?? null, data.name ?? null, data.label ?? null, data.rssi_range ?? -70, existing.id]
+      );
+      return toDeviceResponse(result.rows[0]);
+    }
+    throw new ValidationError(`Device code "${data.device_code}" already exists`);
+  }
+
   const result = await query<Device>(
     `INSERT INTO devices (device_code, room_id, name, label, rssi_range)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
