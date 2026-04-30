@@ -19,12 +19,12 @@ function toDeviceResponse(row: any): DeviceResponse {
   return {
     id: row.id,
     device_id: row.device_code,
-    name: row.label || row.device_code,
+    name: row.name || row.label || row.device_code,
     room_id: row.room_id || null,
     room_name: row.room_name || null,
     status: isOnline ? 'online' : 'offline',
     last_seen: row.last_heartbeat ? new Date(row.last_heartbeat).toISOString() : null,
-    firmware_version: row.firmware_version || null,
+    rssi_range: row.rssi_range ?? -70,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : (row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()),
   };
@@ -108,11 +108,11 @@ export async function getDeviceByCode(device_code: string): Promise<Device | nul
   return result.rows[0] ?? null;
 }
 
-export async function createDevice(data: { device_code: string; room_id?: string | null; label?: string; firmware_version?: string }): Promise<DeviceResponse> {
+export async function createDevice(data: { device_code: string; room_id?: string | null; name?: string; label?: string; rssi_range?: number }): Promise<DeviceResponse> {
   const result = await query<Device>(
-    `INSERT INTO devices (device_code, room_id, label, firmware_version)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [data.device_code, data.room_id ?? null, data.label ?? null, data.firmware_version ?? null]
+    `INSERT INTO devices (device_code, room_id, name, label, rssi_range)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [data.device_code, data.room_id ?? null, data.name ?? null, data.label ?? null, data.rssi_range ?? -70]
   );
   return toDeviceResponse(result.rows[0]);
 }
@@ -135,10 +135,19 @@ export async function updateDeviceLabel(id: string, label: string): Promise<Devi
   return getDeviceById(id);
 }
 
-export async function updateDeviceFirmware(id: string, firmware_version: string): Promise<DeviceResponse> {
+export async function updateDeviceName(id: string, name: string): Promise<DeviceResponse> {
   const result = await query<Device>(
-    `UPDATE devices SET firmware_version = $1 WHERE id = $2 RETURNING *`,
-    [firmware_version, id]
+    `UPDATE devices SET name = $1 WHERE id = $2 RETURNING *`,
+    [name, id]
+  );
+  if (result.rows.length === 0) throw new NotFoundError('Device not found');
+  return getDeviceById(id);
+}
+
+export async function updateDeviceRssiRange(id: string, rssi_range: number): Promise<DeviceResponse> {
+  const result = await query<Device>(
+    `UPDATE devices SET rssi_range = $1 WHERE id = $2 RETURNING *`,
+    [rssi_range, id]
   );
   if (result.rows.length === 0) throw new NotFoundError('Device not found');
   return getDeviceById(id);
@@ -532,7 +541,46 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
 
   // Current presence state
   const currentPresence = await getPresenceByItemId(tag.item_id);
+  const deviceRssiRange = device.rssi_range ?? -70;
 
+  // RSSI threshold check for transporting / arrived logic
+  const isWeakSignal = rssi < deviceRssiRange;
+
+  if (isWeakSignal) {
+    // Weak signal: if item is currently in this device's room, mark as transporting
+    if (currentPresence && currentPresence.current_room_id === device.room_id) {
+      await upsertPresenceState({
+        item_id: tag.item_id,
+        current_room_id: device.room_id,
+        presence_status: 'transporting',
+        last_seen_at: new Date(),
+        last_device_id: device.id,
+        last_rssi: rssi,
+      });
+      await appendLocationHistory({
+        item_id: tag.item_id,
+        room_id: device.room_id,
+        device_id: device.id,
+        presence_status: 'transporting',
+        rssi,
+        conflict_meta: { rule: 'rssi', reason: 'weak_signal_transporting', threshold: deviceRssiRange },
+      });
+      broadcast({ type: 'item_transporting', item_id: tag.item_id, room_id: device.room_id, rssi, timestamp: new Date().toISOString() });
+    } else {
+      // Weak signal from a different room — log but don't change presence
+      await appendLocationHistory({
+        item_id: tag.item_id,
+        room_id: device.room_id,
+        device_id: device.id,
+        presence_status: currentPresence?.presence_status ?? 'unknown',
+        rssi,
+        conflict_meta: { rule: 'rssi', reason: 'weak_signal_ignored', threshold: deviceRssiRange, current_room_id: currentPresence?.current_room_id },
+      });
+    }
+    return;
+  }
+
+  // Strong signal (rssi >= threshold)
   if (!currentPresence) {
     // Rule 1: New tag sighting → insert presence state
     await upsertPresenceState({
@@ -549,7 +597,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
       device_id: device.id,
       presence_status: 'present',
       rssi,
-      conflict_meta: { rule: 1 },
+      conflict_meta: { rule: 1, note: `item arrived to ${device.room_id}` },
     });
     broadcast({ type: 'item_location', item_id: tag.item_id, room_id: device.room_id, presence_status: 'present', rssi, timestamp: new Date().toISOString() });
     return;
@@ -581,6 +629,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
 
   // Update presence state (room may be same or changed after conflict resolution)
   const roomChanged = currentPresence.current_room_id !== device.room_id;
+  const wasTransporting = currentPresence.presence_status === 'transporting';
   await upsertPresenceState({
     item_id: tag.item_id,
     current_room_id: device.room_id,
@@ -590,13 +639,21 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
     last_rssi: rssi,
   });
 
+  const conflictMeta: Record<string, unknown> = roomChanged
+    ? { rule: 2, reason: 'room_changed' }
+    : {};
+  if (wasTransporting || roomChanged) {
+    conflictMeta.note = `item arrived to ${device.room_id}`;
+    conflictMeta.arrived = true;
+  }
+
   await appendLocationHistory({
     item_id: tag.item_id,
     room_id: device.room_id,
     device_id: device.id,
     presence_status: 'present',
     rssi,
-    conflict_meta: roomChanged ? { rule: 2, reason: 'room_changed' } : null,
+    conflict_meta: Object.keys(conflictMeta).length > 0 ? conflictMeta : null,
   });
 
   broadcast({
@@ -617,7 +674,7 @@ export async function runMissingDetectionJob(): Promise<void> {
 
   const result = await query<{ item_id: string }>(
     `SELECT item_id FROM item_presence_state
-     WHERE presence_status = 'present'
+     WHERE presence_status IN ('present', 'transporting')
        AND last_seen_at < $1`,
     [cutoff]
   );

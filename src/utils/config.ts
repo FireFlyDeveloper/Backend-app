@@ -18,6 +18,5 @@ export const config = {
   missingJobIntervalSeconds: parseInt(process.env.MISSING_JOB_INTERVAL_SECONDS || '60', 10),
   mqttUrl: process.env.MQTT_URL || 'mqtt://localhost:1883',
   mqttBleTopic: process.env.MQTT_BLE_TOPIC || 'ble/events',
-  mqttHeartbeatTopic: process.env.MQTT_HEARTBEAT_TOPIC || 'device/heartbeat',
   wsPort: parseInt(process.env.WS_PORT || '3001', 10),
 };

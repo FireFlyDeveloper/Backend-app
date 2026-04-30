@@ -18,11 +18,11 @@ export function initMqtt(): mqtt.MqttClient {
 
   client.on('connect', () => {
     console.log(`[MQTT] Connected to ${config.mqttUrl}`);
-    client!.subscribe([config.mqttBleTopic, config.mqttHeartbeatTopic], (err) => {
+    client!.subscribe(config.mqttBleTopic, (err) => {
       if (err) {
         console.error('[MQTT] Subscribe error:', err);
       } else {
-        console.log(`[MQTT] Subscribed to ${config.mqttBleTopic}, ${config.mqttHeartbeatTopic}`);
+        console.log(`[MQTT] Subscribed to ${config.mqttBleTopic}`);
       }
     });
   });
@@ -31,9 +31,14 @@ export function initMqtt(): mqtt.MqttClient {
     try {
       const payload = JSON.parse(message.toString());
       if (topic === config.mqttBleTopic) {
-        await handleBleEvent(payload);
-      } else if (topic === config.mqttHeartbeatTopic) {
-        await handleDeviceHeartbeat(payload);
+        // BLE topic carries both scan events and heartbeats
+        if (isHeartbeatPayload(payload)) {
+          await handleDeviceHeartbeat(payload);
+        } else if (isBleScanPayload(payload)) {
+          await handleBleEvent(payload);
+        } else {
+          console.warn('[MQTT] Unrecognized payload on ble topic');
+        }
       }
     } catch (err) {
       console.error('[MQTT] Message handling error:', err);
@@ -67,6 +72,17 @@ async function handleDeviceHeartbeat(payload: unknown): Promise<void> {
   await recordDeviceHeartbeat(payload.device_code);
 }
 
+function isHeartbeatPayload(obj: unknown): obj is { device_code: string } {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'device_code' in obj &&
+    typeof (obj as any).device_code === 'string' &&
+    !('tag_code' in obj) &&
+    !('rssi' in obj)
+  );
+}
+
 function isBleScanPayload(obj: unknown): obj is { device_code: string; tag_code: string; rssi: number } {
   return (
     typeof obj === 'object' &&
@@ -77,15 +93,6 @@ function isBleScanPayload(obj: unknown): obj is { device_code: string; tag_code:
     typeof (obj as any).device_code === 'string' &&
     typeof (obj as any).tag_code === 'string' &&
     typeof (obj as any).rssi === 'number'
-  );
-}
-
-function isHeartbeatPayload(obj: unknown): obj is { device_code: string } {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'device_code' in obj &&
-    typeof (obj as any).device_code === 'string'
   );
 }
 

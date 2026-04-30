@@ -6,7 +6,8 @@ import {
   createDevice,
   updateDeviceRoom,
   updateDeviceLabel,
-  updateDeviceFirmware,
+  updateDeviceName,
+  updateDeviceRssiRange,
   softDeleteDevice,
   updateRoom,
   softDeleteRoom,
@@ -89,12 +90,13 @@ export async function getDevice(req: AuthRequest, res: Response, next: NextFunct
 
 export async function postDevice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // Accept frontend field names: device_id -> device_code, name -> label
+    // Accept frontend field names: device_id -> device_code, name -> name/label
     const device_code = req.body.device_id ?? req.body.device_code;
-    const label = req.body.name ?? req.body.label;
-    const { room_id, firmware_version } = req.body;
+    const name = req.body.name ?? req.body.name;
+    const label = req.body.label ?? req.body.name;
+    const { room_id, rssi_range } = req.body;
     if (!device_code) throw new ValidationError('device_id or device_code is required');
-    const device = await createDevice({ device_code, room_id, label, firmware_version });
+    const device = await createDevice({ device_code, room_id, name, label, rssi_range });
     res.status(201).json({ device });
   } catch (err) {
     next(err);
@@ -103,20 +105,24 @@ export async function postDevice(req: AuthRequest, res: Response, next: NextFunc
 
 export async function patchDevice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // Accept frontend field names: name -> label, room_id -> room_id
-    const label = req.body.name ?? req.body.label;
+    // Accept frontend field names: name -> name/label, room_id -> room_id
+    const name = req.body.name;
+    const label = req.body.label ?? req.body.name;
     const room_id = req.body.room_id;
-    const firmware_version = req.body.firmware_version;
+    const rssi_range = req.body.rssi_range;
     const deviceId = req.params.id as string;
 
-    if (label !== undefined) {
+    if (name !== undefined) {
+      await updateDeviceName(deviceId, name);
+    }
+    if (label !== undefined && name === undefined) {
       await updateDeviceLabel(deviceId, label);
     }
     if (room_id !== undefined) {
       await updateDeviceRoom(deviceId, room_id || null);
     }
-    if (firmware_version !== undefined) {
-      await updateDeviceFirmware(deviceId, firmware_version);
+    if (rssi_range !== undefined) {
+      await updateDeviceRssiRange(deviceId, Number(rssi_range));
     }
 
     const device = await getDeviceById(deviceId);

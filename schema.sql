@@ -240,7 +240,9 @@ CREATE TABLE IF NOT EXISTS devices (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   device_code     TEXT NOT NULL UNIQUE,
   room_id         UUID REFERENCES rooms(id) ON DELETE SET NULL,
+  name            TEXT,
   label           TEXT,
+  rssi_range      INT DEFAULT -70,
   last_heartbeat  TIMESTAMPTZ,
   offline_since   TIMESTAMPTZ,
   is_active       BOOLEAN NOT NULL DEFAULT true,
@@ -274,7 +276,7 @@ CREATE TABLE IF NOT EXISTS item_presence_state (
   current_room_id  UUID REFERENCES rooms(id) ON DELETE SET NULL,
   presence_status  TEXT NOT NULL DEFAULT 'unknown'
                    CHECK (presence_status IN (
-                     'present', 'missing', 'inactive', 'maintenance', 'unknown'
+                     'present', 'missing', 'inactive', 'maintenance', 'unknown', 'transporting'
                    )),
   last_seen_at     TIMESTAMPTZ,
   last_device_id   UUID REFERENCES devices(id) ON DELETE SET NULL,

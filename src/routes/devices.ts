@@ -11,7 +11,6 @@ import {
   putDeviceLabel,
   deleteDevice,
   postDeviceEvent,
-  postDeviceHeartbeat,
 } from '../controllers/deviceController';
 
 const router = Router();
@@ -31,6 +30,5 @@ router.delete('/:id', authenticate, requireAdmin, deleteDevice);
 
 // REST ingestion (alias for MQTT payloads)
 router.post('/events', authenticate, requireRoles('admin', 'staff'), postDeviceEvent);
-router.post('/heartbeat', authenticate, requireRoles('admin', 'staff'), postDeviceHeartbeat);
 
 export default router;

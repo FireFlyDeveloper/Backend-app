@@ -13,11 +13,12 @@ export interface Device {
   id: string;
   device_code: string;
   room_id: string | null;
+  name: string | null;
   label: string | null;
+  rssi_range: number | null;
   last_heartbeat: Date | null;
   offline_since: Date | null;
   is_active: boolean;
-  firmware_version: string | null;
   created_at: Date;
 }
 
@@ -29,7 +30,7 @@ export interface DeviceResponse {
   room_name: string | null;
   status: 'online' | 'offline';
   last_seen: string | null;
-  firmware_version: string | null;
+  rssi_range: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,7 +49,7 @@ export interface BleTag {
 export interface ItemPresenceState {
   item_id: string;
   current_room_id: string | null;
-  presence_status: 'present' | 'missing' | 'inactive' | 'maintenance' | 'unknown';
+  presence_status: 'present' | 'missing' | 'inactive' | 'maintenance' | 'unknown' | 'transporting';
   last_seen_at: Date | null;
   last_device_id: string | null;
   last_rssi: number | null;
