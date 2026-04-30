@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   building    TEXT,
   floor       INT,
   description TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at  TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS devices (
