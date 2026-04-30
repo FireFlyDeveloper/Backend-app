@@ -862,6 +862,40 @@ export async function runDeviceOfflineJob(): Promise<void> {
     });
 
     broadcast({ type: 'device_offline', device_id: device.id, device_name: device.label || device.device_code, room_id: device.room_id, last_seen: device.last_heartbeat ? new Date(device.last_heartbeat).toISOString() : null, timestamp: new Date().toISOString() });
+
+    // Mark any 'transporting' items last seen by this device as missing
+    // because there is no anchor left to track them.
+    const transportingResult = await query<{ item_id: string }>(
+      `SELECT item_id FROM item_presence_state
+       WHERE last_device_id = $1
+         AND presence_status = 'transporting'`,
+      [device.id]
+    );
+    for (const row of transportingResult.rows) {
+      await markItemMissing(row.item_id);
+      const presence = await getPresenceByItemId(row.item_id);
+      await appendLocationHistory({
+        item_id: row.item_id,
+        room_id: presence?.current_room_id ?? null,
+        device_id: device.id,
+        presence_status: 'missing',
+        rssi: presence?.last_rssi ?? null,
+        conflict_meta: { rule: 'device_offline', reason: 'anchor_went_offline_while_transporting' },
+      });
+      await logAudit({
+        action: 'item_missing',
+        entity_type: 'item_presence_state',
+        entity_id: row.item_id,
+        after_state: {
+          presence_status: 'missing',
+          missing_since: new Date().toISOString(),
+          last_room_id: presence?.current_room_id ?? null,
+          last_device_id: device.id,
+          reason: 'anchor_offline_during_transport',
+        },
+      });
+      broadcast({ type: 'item_missing', item_id: row.item_id, last_room_id: presence?.current_room_id ?? null, last_seen: presence?.last_seen_at ? new Date(presence.last_seen_at).toISOString() : null, timestamp: new Date().toISOString() });
+    }
   }
 }
 
