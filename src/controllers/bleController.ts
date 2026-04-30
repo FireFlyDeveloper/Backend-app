@@ -112,6 +112,7 @@ export async function getPresence(req: AuthRequest, res: Response, next: NextFun
       room_name: s.room_name,
       status: s.presence_status,
       last_seen: s.last_seen_at,
+      missing_since: s.missing_since,
       device_id: s.last_device_id,
       device_name: s.device_name,
     }));

@@ -669,7 +669,17 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
       });
       broadcast({ type: 'item_transporting', item_id: tag.item_id, room_id: device.room_id, rssi, timestamp: new Date().toISOString() });
     } else {
-      // Weak signal from a different room — log but don't change presence
+      // Weak signal from a different room — update last_seen so missing timer doesn't fire,
+      // but don't change presence state or room.
+      await query(
+        `UPDATE item_presence_state
+         SET last_seen_at = NOW(),
+             last_device_id = $1,
+             last_rssi = $2,
+             updated_at = NOW()
+         WHERE item_id = $3`,
+        [device.id, rssi, tag.item_id]
+      );
       await appendLocationHistory({
         item_id: tag.item_id,
         room_id: device.room_id,
@@ -776,7 +786,7 @@ export async function runMissingDetectionJob(): Promise<void> {
 
   const result = await query<{ item_id: string }>(
     `SELECT item_id FROM item_presence_state
-     WHERE presence_status IN ('present', 'transporting')
+     WHERE presence_status = 'present'
        AND last_seen_at < $1`,
     [cutoff]
   );
