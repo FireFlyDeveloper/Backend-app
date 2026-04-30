@@ -556,7 +556,24 @@ export async function logAudit(data: {
 // ======================= Conflict Resolution (Rules 1-7) =======================
 
 export async function processBleScan(payload: BleScanPayload): Promise<void> {
-  const { device_code, tag_code, rssi } = payload;
+  const device_code = payload.device_code;
+  const tag_code = payload.tag_code;
+  const rssi = payload.rssi;
+
+  if (!device_code || !tag_code) {
+    console.warn('[BLE] Missing device_code or tag_code in scan payload');
+    return;
+  }
+
+  // Build metadata from extra payload fields for history logging
+  const scanMeta: Record<string, unknown> = {};
+  if (payload.uuid) scanMeta.uuid = payload.uuid;
+  if (payload.major !== undefined) scanMeta.major = payload.major;
+  if (payload.minor !== undefined) scanMeta.minor = payload.minor;
+  if (payload.tx_power !== undefined) scanMeta.tx_power = payload.tx_power;
+  if (payload.uptime !== undefined) scanMeta.anchor_uptime = payload.uptime;
+  if (payload.wifi_rssi !== undefined) scanMeta.wifi_rssi = payload.wifi_rssi;
+  if (payload.timestamp !== undefined) scanMeta.device_timestamp = payload.timestamp;
 
   // Resolve device
   const device = await getDeviceByCode(device_code);
@@ -567,8 +584,12 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
 
   if (!device.is_active) return; // ignore inactive devices
 
-  // Resolve tag
-  const tag = await getBleTagByCode(tag_code);
+  // Resolve tag (by tag_code/mac first; fallback to uuid:major:minor synthetic key)
+  let tag = await getBleTagByCode(tag_code);
+  if (!tag && payload.uuid && payload.major !== undefined && payload.minor !== undefined) {
+    const syntheticCode = `${payload.uuid}:${payload.major}:${payload.minor}`;
+    tag = await getBleTagByCode(syntheticCode);
+  }
 
   // Log raw event
   await logDeviceEvent({
@@ -608,7 +629,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
       device_id: device.id,
       presence_status: itemStatus,
       rssi,
-      conflict_meta: { rule: 7, reason: `item_status_${itemStatus}` },
+      conflict_meta: { ...scanMeta, rule: 7, reason: `item_status_${itemStatus}` },
     });
     broadcast({ type: 'item_status', item_id: tag.item_id, status: itemStatus, timestamp: new Date().toISOString() });
     return;
@@ -638,7 +659,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
         device_id: device.id,
         presence_status: 'transporting',
         rssi,
-        conflict_meta: { rule: 'rssi', reason: 'weak_signal_transporting', threshold: deviceRssiRange },
+        conflict_meta: { ...scanMeta, rule: 'rssi', reason: 'weak_signal_transporting', threshold: deviceRssiRange },
       });
       broadcast({ type: 'item_transporting', item_id: tag.item_id, room_id: device.room_id, rssi, timestamp: new Date().toISOString() });
     } else {
@@ -649,7 +670,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
         device_id: device.id,
         presence_status: currentPresence?.presence_status ?? 'unknown',
         rssi,
-        conflict_meta: { rule: 'rssi', reason: 'weak_signal_ignored', threshold: deviceRssiRange, current_room_id: currentPresence?.current_room_id },
+        conflict_meta: { ...scanMeta, rule: 'rssi', reason: 'weak_signal_ignored', threshold: deviceRssiRange, current_room_id: currentPresence?.current_room_id },
       });
     }
     return;
@@ -672,7 +693,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
       device_id: device.id,
       presence_status: 'present',
       rssi,
-      conflict_meta: { rule: 1, note: `item arrived to ${device.room_id}` },
+      conflict_meta: { ...scanMeta, rule: 1, note: `item arrived to ${device.room_id}` },
     });
     broadcast({ type: 'item_location', item_id: tag.item_id, room_id: device.room_id, presence_status: 'present', rssi, timestamp: new Date().toISOString() });
     return;
@@ -695,7 +716,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
         device_id: device.id,
         presence_status: 'present',
         rssi,
-        conflict_meta: { rule: 2, reason: 'lower_rssi_rejected', winner_room_id: currentPresence.current_room_id, winner_rssi: currentPresence.last_rssi },
+        conflict_meta: { ...scanMeta, rule: 2, reason: 'lower_rssi_rejected', winner_room_id: currentPresence.current_room_id, winner_rssi: currentPresence.last_rssi },
       });
       return;
     }
@@ -715,8 +736,8 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
   });
 
   const conflictMeta: Record<string, unknown> = roomChanged
-    ? { rule: 2, reason: 'room_changed' }
-    : {};
+    ? { ...scanMeta, rule: 2, reason: 'room_changed' }
+    : { ...scanMeta };
   if (wasTransporting || roomChanged) {
     conflictMeta.note = `item arrived to ${device.room_id}`;
     conflictMeta.arrived = true;

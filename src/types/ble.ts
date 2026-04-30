@@ -81,13 +81,22 @@ export interface DeviceEvent {
 }
 
 export interface BleScanPayload {
-  device_code: string;
-  tag_code: string;
+  device_code?: string;
+  tag_code?: string;
+  anchor_id?: string;      // BLE gateway id (alternative to device_code)
+  mac?: string;            // Beacon MAC address (alternative to tag_code)
   rssi: number;
-  timestamp?: string; // ISO string from device
+  timestamp?: string | number;
+  uuid?: string;
+  major?: number;
+  minor?: number;
+  tx_power?: number;
+  uptime?: number;
+  wifi_rssi?: number;
 }
 
 export interface DeviceHeartbeatPayload {
-  device_code: string;
-  timestamp?: string;
+  device_code?: string;
+  anchor_id?: string;
+  timestamp?: string | number;
 }
