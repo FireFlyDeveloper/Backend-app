@@ -36,6 +36,30 @@ export interface SafeUser {
   can_checkout_quantifiable: boolean;
 }
 
+export interface UserRoleDetail {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface UserWithRoles {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  created_at: Date;
+  roles: UserRoleDetail[];
+  can_checkout_quantifiable: boolean;
+}
+
+export interface PaginatedUsers {
+  users: UserWithRoles[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 // --- Document Types ---
 
 export interface Folder {

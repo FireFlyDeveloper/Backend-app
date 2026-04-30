@@ -12,10 +12,18 @@ import {
 } from '../services/userService';
 import { ValidationError } from '../utils/errors';
 
-export async function getUsers(_req: AuthRequest, res: Response, next: NextFunction) {
+export async function getUsers(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const users = await listUsers();
-    res.json({ users });
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const per_page = req.query.per_page ? parseInt(req.query.per_page as string, 10) : 20;
+    const search = (req.query.search as string) || undefined;
+    const role = (req.query.role as string) || undefined;
+    const is_active = req.query.is_active !== undefined
+      ? req.query.is_active === 'true'
+      : undefined;
+
+    const result = await listUsers({ page, per_page, search, role, is_active });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -32,11 +40,11 @@ export async function getUser(req: AuthRequest, res: Response, next: NextFunctio
 
 export async function postUser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { email, display_name, password, is_active } = req.body;
+    const { email, display_name, password, is_active, role_ids } = req.body;
     if (!email || !display_name || !password) {
       throw new ValidationError('email, display_name, and password are required');
     }
-    const user = await createUser({ email, display_name, password, is_active });
+    const user = await createUser({ email, display_name, password, is_active, role_ids });
     res.status(201).json({ user });
   } catch (err) {
     next(err);

@@ -1,35 +1,111 @@
 import { query, withTransaction } from '../utils/db';
 import { hashPassword } from '../utils/password';
-import { SafeUser, User } from '../types';
+import { SafeUser, UserWithRoles, PaginatedUsers, UserRoleDetail } from '../types';
 import { NotFoundError, ConflictError } from '../utils/errors';
 
-export async function listUsers(): Promise<SafeUser[]> {
+function mapUserRow(row: any): UserWithRoles {
+  const roles: UserRoleDetail[] = row.role_ids
+    ? row.role_ids.map((id: string, i: number) => ({
+        id,
+        name: row.role_names[i],
+        description: row.role_descriptions?.[i] ?? null,
+      }))
+    : [];
+
+  return {
+    id: row.id,
+    email: row.email,
+    display_name: row.display_name,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    roles,
+    can_checkout_quantifiable: row.can_checkout_quantifiable || false,
+  };
+}
+
+export async function listUsers(options?: {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  role?: string;
+  is_active?: boolean;
+}): Promise<PaginatedUsers> {
+  const page = Math.max(1, options?.page ?? 1);
+  const per_page = Math.min(100, Math.max(1, options?.per_page ?? 20));
+  const offset = (page - 1) * per_page;
+
+  const conditions: string[] = ['u.deleted_at IS NULL'];
+  const values: any[] = [];
+  let idx = 1;
+
+  if (options?.search) {
+    conditions.push(`(
+      u.email ILIKE $${idx}
+      OR u.display_name ILIKE $${idx}
+    )`);
+    values.push(`%${options.search}%`);
+    idx++;
+  }
+
+  if (options?.role) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM user_roles ur2
+      JOIN roles r2 ON r2.id = ur2.role_id
+      WHERE ur2.user_id = u.id AND r2.name = $${idx}
+    )`);
+    values.push(options.role);
+    idx++;
+  }
+
+  if (options?.is_active !== undefined) {
+    conditions.push(`u.is_active = $${idx}`);
+    values.push(options.is_active);
+    idx++;
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  // Count total
+  const countResult = await query(
+    `SELECT COUNT(DISTINCT u.id) as total FROM users u WHERE ${whereClause}`,
+    values
+  );
+  const total = parseInt(countResult.rows[0].total, 10);
+
+  // Fetch paginated users with roles
   const result = await query(
     `SELECT u.id, u.email, u.display_name, u.is_active, u.created_at,
-      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+      ARRAY_AGG(r.id) FILTER (WHERE r.id IS NOT NULL) as role_ids,
+      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as role_names,
+      ARRAY_AGG(r.description) FILTER (WHERE r.description IS NOT NULL) as role_descriptions,
       BOOL_OR(r.can_checkout_quantifiable) as can_checkout_quantifiable
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
-     WHERE u.deleted_at IS NULL
+     WHERE ${whereClause}
      GROUP BY u.id
-     ORDER BY u.created_at DESC`
+     ORDER BY u.created_at DESC
+     LIMIT $${idx} OFFSET $${idx + 1}`,
+    [...values, per_page, offset]
   );
-  return result.rows.map((r) => ({
-    id: r.id,
-    email: r.email,
-    display_name: r.display_name,
-    is_active: r.is_active,
-    created_at: r.created_at,
-    roles: r.roles || [],
-    can_checkout_quantifiable: r.can_checkout_quantifiable || false,
-  }));
+
+  const users = result.rows.map(mapUserRow);
+
+  return {
+    users,
+    total,
+    page,
+    per_page,
+    total_pages: Math.ceil(total / per_page),
+  };
 }
 
-export async function getUserById(id: string): Promise<SafeUser> {
+export async function getUserById(id: string): Promise<UserWithRoles> {
   const result = await query(
     `SELECT u.id, u.email, u.display_name, u.is_active, u.created_at,
-      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+      ARRAY_AGG(r.id) FILTER (WHERE r.id IS NOT NULL) as role_ids,
+      ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL) as role_names,
+      ARRAY_AGG(r.description) FILTER (WHERE r.description IS NOT NULL) as role_descriptions,
       BOOL_OR(r.can_checkout_quantifiable) as can_checkout_quantifiable
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -39,21 +115,12 @@ export async function getUserById(id: string): Promise<SafeUser> {
     [id]
   );
   if (result.rows.length === 0) throw new NotFoundError('User not found');
-  const r = result.rows[0];
-  return {
-    id: r.id,
-    email: r.email,
-    display_name: r.display_name,
-    is_active: r.is_active,
-    created_at: r.created_at,
-    roles: r.roles || [],
-    can_checkout_quantifiable: r.can_checkout_quantifiable || false,
-  };
+  return mapUserRow(result.rows[0]);
 }
 
-export async function getUserByEmail(email: string): Promise<User | null> {
+export async function getUserByEmail(email: string): Promise<{ id: string; email: string; display_name: string; password_hash: string; is_active: boolean } | null> {
   const result = await query(
-    `SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`,
+    `SELECT id, email, display_name, password_hash, is_active FROM users WHERE email = $1 AND deleted_at IS NULL`,
     [email]
   );
   return result.rows[0] || null;
@@ -64,33 +131,41 @@ export async function createUser(data: {
   display_name: string;
   password: string;
   is_active?: boolean;
-}): Promise<SafeUser> {
+  role_ids?: string[];
+}): Promise<UserWithRoles> {
   const existing = await query(`SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL`, [data.email]);
   if (existing.rows.length > 0) throw new ConflictError('Email already in use');
 
   const passwordHash = await hashPassword(data.password);
+
   const result = await query(
     `INSERT INTO users (email, display_name, password_hash, is_active)
      VALUES ($1, $2, $3, $4)
      RETURNING id, email, display_name, is_active, created_at`,
     [data.email, data.display_name, passwordHash, data.is_active ?? true]
   );
-  const r = result.rows[0];
-  return {
-    id: r.id,
-    email: r.email,
-    display_name: r.display_name,
-    is_active: r.is_active,
-    created_at: r.created_at,
-    roles: [],
-    can_checkout_quantifiable: false,
-  };
+
+  const userId = result.rows[0].id;
+
+  // Assign roles if provided
+  if (data.role_ids && data.role_ids.length > 0) {
+    const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+    const validRoleIds = validRoles.rows.map((r) => r.id);
+    for (const roleId of validRoleIds) {
+      await query(
+        `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, roleId]
+      );
+    }
+  }
+
+  return getUserById(userId);
 }
 
 export async function updateUser(
   id: string,
-  data: { display_name?: string; is_active?: boolean; password?: string }
-): Promise<SafeUser> {
+  data: { display_name?: string; email?: string; is_active?: boolean; password?: string; role_ids?: string[] }
+): Promise<UserWithRoles> {
   const sets: string[] = [];
   const values: any[] = [];
   let idx = 1;
@@ -98,6 +173,15 @@ export async function updateUser(
   if (data.display_name !== undefined) {
     sets.push(`display_name = $${idx++}`);
     values.push(data.display_name);
+  }
+  if (data.email !== undefined) {
+    const existing = await query(`SELECT id FROM users WHERE email = $1 AND id != $2 AND deleted_at IS NULL`, [
+      data.email,
+      id,
+    ]);
+    if (existing.rows.length > 0) throw new ConflictError('Email already in use');
+    sets.push(`email = $${idx++}`);
+    values.push(data.email);
   }
   if (data.is_active !== undefined) {
     sets.push(`is_active = $${idx++}`);
@@ -107,16 +191,38 @@ export async function updateUser(
     sets.push(`password_hash = $${idx++}`);
     values.push(await hashPassword(data.password));
   }
-  if (sets.length === 0) throw new Error('No fields to update');
+  if (sets.length === 0 && (!data.role_ids || data.role_ids.length === 0)) {
+    throw new Error('No fields to update');
+  }
 
-  sets.push(`updated_at = now()`);
-  values.push(id);
+  // Update user fields
+  if (sets.length > 0) {
+    sets.push(`updated_at = now()`);
+    values.push(id);
+    const result = await query(
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx} AND deleted_at IS NULL RETURNING id`,
+      values
+    );
+    if (result.rows.length === 0) throw new NotFoundError('User not found');
+  }
 
-  const result = await query(
-    `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx} AND deleted_at IS NULL RETURNING id`,
-    values
-  );
-  if (result.rows.length === 0) throw new NotFoundError('User not found');
+  // Update roles if provided
+  if (data.role_ids !== undefined) {
+    await withTransaction(async (client) => {
+      await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [id]);
+      if (data.role_ids!.length > 0) {
+        const validRoles = await client.query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+        const validRoleIds = validRoles.rows.map((r) => r.id);
+        for (const roleId of validRoleIds) {
+          await client.query(
+            `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [id, roleId]
+          );
+        }
+      }
+    });
+  }
+
   return getUserById(id);
 }
 

@@ -1,16 +1,22 @@
 import jwt from 'jsonwebtoken';
 import { config } from './config';
-import { SafeUser } from '../types';
+import { SafeUser, UserWithRoles } from '../types';
 
-export function signToken(user: SafeUser): string {
+function extractRoleNames(user: SafeUser | UserWithRoles): string[] {
+  if (!user.roles || user.roles.length === 0) return [];
+  if (typeof user.roles[0] === 'string') return user.roles as string[];
+  return (user.roles as { name: string }[]).map((r) => r.name);
+}
+
+export function signToken(user: SafeUser | UserWithRoles): string {
   return jwt.sign(
-    { id: user.id, email: user.email, roles: user.roles },
+    { id: user.id, email: user.email, roles: extractRoleNames(user) },
     config.jwtSecret,
     { expiresIn: config.jwtExpirySeconds }
   );
 }
 
-export function signRefreshToken(user: SafeUser): string {
+export function signRefreshToken(user: SafeUser | UserWithRoles): string {
   return jwt.sign(
     { id: user.id, email: user.email },
     config.jwtRefreshSecret,

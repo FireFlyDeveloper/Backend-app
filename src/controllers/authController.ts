@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { getUserByEmail, getUserById } from '../services/userService';
+import { SafeUser } from '../types';
 import { verifyPassword } from '../utils/password';
 import { signToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { UnauthorizedError } from '../utils/errors';
@@ -23,10 +24,19 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     // Fetch user with roles
     const userWithRoles = await getUserById(user.id);
+    const userForResponse: SafeUser = {
+      id: userWithRoles.id,
+      email: userWithRoles.email,
+      display_name: userWithRoles.display_name,
+      is_active: userWithRoles.is_active,
+      created_at: userWithRoles.created_at,
+      roles: userWithRoles.roles.map((r) => r.name),
+      can_checkout_quantifiable: userWithRoles.can_checkout_quantifiable,
+    };
 
-    const token = signToken(userWithRoles);
-    const refreshToken = signRefreshToken(userWithRoles);
-    res.json({ token, refreshToken, user: userWithRoles });
+    const token = signToken(userForResponse);
+    const refreshToken = signRefreshToken(userForResponse);
+    res.json({ token, refreshToken, user: userForResponse });
   } catch (err) {
     next(err);
   }
@@ -40,10 +50,19 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
     }
 
     const payload = verifyRefreshToken(refreshToken);
-    const user = await getUserById(payload.id);
+    const userWithRoles = await getUserById(payload.id);
+    const userForResponse: SafeUser = {
+      id: userWithRoles.id,
+      email: userWithRoles.email,
+      display_name: userWithRoles.display_name,
+      is_active: userWithRoles.is_active,
+      created_at: userWithRoles.created_at,
+      roles: userWithRoles.roles.map((r) => r.name),
+      can_checkout_quantifiable: userWithRoles.can_checkout_quantifiable,
+    };
 
-    const newToken = signToken(user);
-    const newRefreshToken = signRefreshToken(user);
+    const newToken = signToken(userForResponse);
+    const newRefreshToken = signRefreshToken(userForResponse);
     res.json({ token: newToken, refreshToken: newRefreshToken });
   } catch (err) {
     next(err);
