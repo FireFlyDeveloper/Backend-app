@@ -152,6 +152,26 @@ export async function createFolder(data: {
   name: string;
   created_by: string;
 }): Promise<Folder> {
+  const existing = await query(
+    `SELECT id, deleted_at FROM folders WHERE parent_id IS NOT DISTINCT FROM $1 AND name = $2`,
+    [data.parent_id || null, data.name]
+  );
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    if (row.deleted_at) {
+      const result = await query(
+        `UPDATE folders
+         SET deleted_at = NULL,
+             created_by = $1
+         WHERE id = $2
+         RETURNING *`,
+        [data.created_by, row.id]
+      );
+      return result.rows[0];
+    }
+    throw new ConflictError('Folder already exists');
+  }
+
   const result = await query(
     `INSERT INTO folders (parent_id, name, created_by)
      VALUES ($1, $2, $3)
@@ -218,6 +238,30 @@ export async function createDocument(data: {
   storage_path: string;
   uploaded_by: string;
 }): Promise<Document> {
+  const existing = await query(
+    `SELECT id, deleted_at FROM documents WHERE storage_path = $1`,
+    [data.storage_path]
+  );
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    if (row.deleted_at) {
+      const result = await query(
+        `UPDATE documents
+         SET deleted_at = NULL,
+             folder_id = $1,
+             name = $2,
+             mime_type = $3,
+             size_bytes = $4,
+             uploaded_by = $5
+         WHERE id = $6
+         RETURNING *`,
+        [data.folder_id || null, data.name, data.mime_type, data.size_bytes, data.uploaded_by, row.id]
+      );
+      return result.rows[0];
+    }
+    throw new ConflictError('Document with this storage path already exists');
+  }
+
   const result = await query(
     `INSERT INTO documents (folder_id, name, mime_type, size_bytes, storage_path, uploaded_by)
      VALUES ($1, $2, $3, $4, $5, $6)

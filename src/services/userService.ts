@@ -133,10 +133,39 @@ export async function createUser(data: {
   is_active?: boolean;
   role_ids?: string[];
 }): Promise<UserWithRoles> {
-  const existing = await query(`SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL`, [data.email]);
-  if (existing.rows.length > 0) throw new ConflictError('Email already in use');
-
   const passwordHash = await hashPassword(data.password);
+
+  const existing = await query(`SELECT id, deleted_at FROM users WHERE email = $1`, [data.email]);
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    if (row.deleted_at) {
+      const result = await query(
+        `UPDATE users
+         SET deleted_at = NULL,
+             display_name = $1,
+             password_hash = $2,
+             is_active = $3
+         WHERE id = $4
+         RETURNING id, email, display_name, is_active, created_at`,
+        [data.display_name, passwordHash, data.is_active ?? true, row.id]
+      );
+      const userId = result.rows[0].id;
+
+      if (data.role_ids && data.role_ids.length > 0) {
+        const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+        const validRoleIds = validRoles.rows.map((r) => r.id);
+        for (const roleId of validRoleIds) {
+          await query(
+            `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [userId, roleId]
+          );
+        }
+      }
+
+      return getUserById(userId);
+    }
+    throw new ConflictError('Email already in use');
+  }
 
   const result = await query(
     `INSERT INTO users (email, display_name, password_hash, is_active)
