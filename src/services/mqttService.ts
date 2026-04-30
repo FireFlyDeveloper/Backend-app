@@ -104,13 +104,19 @@ function isBleScanPayload(obj: unknown): obj is BleScanPayload {
   );
 }
 
+function sanitizeString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  // Strip NULL bytes and control chars that PostgreSQL UTF8 rejects
+  return value.replace(/\x00/g, '').replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, '').trim() || undefined;
+}
+
 function normalizeBlePayload(obj: any): BleScanPayload {
   return {
-    device_code: obj.device_code || obj.anchor_id,
-    tag_code: obj.tag_code || obj.mac,
+    device_code: sanitizeString(obj.device_code) || sanitizeString(obj.anchor_id),
+    tag_code: sanitizeString(obj.tag_code) || sanitizeString(obj.mac),
     rssi: obj.rssi,
     timestamp: obj.timestamp,
-    uuid: obj.uuid,
+    uuid: sanitizeString(obj.uuid),
     major: obj.major,
     minor: obj.minor,
     tx_power: obj.tx_power,

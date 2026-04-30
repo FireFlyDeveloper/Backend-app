@@ -556,8 +556,8 @@ export async function logAudit(data: {
 // ======================= Conflict Resolution (Rules 1-7) =======================
 
 export async function processBleScan(payload: BleScanPayload): Promise<void> {
-  const device_code = payload.device_code;
-  const tag_code = payload.tag_code;
+  const device_code = payload.device_code?.replace(/\x00/g, '').trim();
+  const tag_code = payload.tag_code?.replace(/\x00/g, '').trim();
   const rssi = payload.rssi;
 
   if (!device_code || !tag_code) {
@@ -567,7 +567,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
 
   // Build metadata from extra payload fields for history logging
   const scanMeta: Record<string, unknown> = {};
-  if (payload.uuid) scanMeta.uuid = payload.uuid;
+  if (payload.uuid) scanMeta.uuid = payload.uuid.replace(/\x00/g, '').trim();
   if (payload.major !== undefined) scanMeta.major = payload.major;
   if (payload.minor !== undefined) scanMeta.minor = payload.minor;
   if (payload.tx_power !== undefined) scanMeta.tx_power = payload.tx_power;
@@ -587,7 +587,7 @@ export async function processBleScan(payload: BleScanPayload): Promise<void> {
   // Resolve tag (by tag_code/mac first; fallback to uuid:major:minor synthetic key)
   let tag = await getBleTagByCode(tag_code);
   if (!tag && payload.uuid && payload.major !== undefined && payload.minor !== undefined) {
-    const syntheticCode = `${payload.uuid}:${payload.major}:${payload.minor}`;
+    const syntheticCode = `${payload.uuid.replace(/\x00/g, '').trim()}:${payload.major}:${payload.minor}`;
     tag = await getBleTagByCode(syntheticCode);
   }
 
