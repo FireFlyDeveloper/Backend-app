@@ -240,11 +240,8 @@ export async function postCheckout(req: AuthRequest, res: Response, next: NextFu
       quantity: Number(l.quantity),
     }));
 
-    // Students need can_checkout_quantifiable role flag
-    if (!ctx.isAdmin && !ctx.canCheckoutQuantifiable) {
-      throw new ForbiddenError('Checkout permission required');
-    }
-
+    // All authenticated users can create checkout requests;
+    // admin/staff get immediate open status, students go to pending_approval.
     const result = await createCheckout(ctx.userId, checkoutLines, notes, ctx.isAdmin || ctx.isStaff);
 
     await logInventoryActivity({
