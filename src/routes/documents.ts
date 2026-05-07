@@ -20,6 +20,7 @@ import {
   getFolderPermissions,
   postFolderPermission,
   deleteFolderPermission,
+  checkDocumentDuplicate,
 } from '../controllers/documentController';
 import { authenticate } from '../middleware/auth';
 
@@ -41,6 +42,7 @@ router.delete('/folders/:id/permissions/:pid', deleteFolderPermission);
 // Documents
 router.get('/documents/search', getDocumentSearch);
 router.post('/documents/upload', upload.single('file'), uploadDocument);
+router.get('/documents/check-duplicate', checkDocumentDuplicate);
 router.post('/documents/:id/upload', upload.single('file'), reuploadDocumentVersion);
 router.get('/documents/:id/download', downloadDocument);
 router.delete('/documents/:id', deleteDocument);

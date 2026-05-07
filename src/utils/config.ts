@@ -19,4 +19,9 @@ export const config = {
   mqttUrl: process.env.MQTT_URL || 'mqtt://localhost:1883',
   mqttBleTopic: process.env.MQTT_BLE_TOPIC || 'ble/events',
   wsPort: parseInt(process.env.WS_PORT || '3001', 10),
+
+  // ONLYOFFICE Document Server
+  officeDocServerUrl: process.env.OFFICE_DOC_SERVER_URL || 'http://localhost:8080',
+  officeJwtSecret: process.env.OFFICE_JWT_SECRET || 'office-secret-change-me',
+  appUrl: process.env.APP_URL || 'http://localhost:3000',
 };

@@ -149,6 +149,21 @@ export async function getFolderDocuments(req: AuthRequest, res: Response, next: 
   }
 }
 
+/**
+ * Generate a unique filename when conflict=duplicate by appending (1), (2), etc.
+ */
+async function getUniqueDocumentName(folderId: string | null, baseName: string): Promise<string> {
+  const ext = path.extname(baseName);
+  const stem = path.basename(baseName, ext);
+  let candidate = baseName;
+  let counter = 1;
+  while (await findDocumentByFolderAndName(folderId, candidate)) {
+    candidate = `${stem} (${counter})${ext}`;
+    counter++;
+  }
+  return candidate;
+}
+
 export async function uploadDocument(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const ctx = getUserContext(req);
@@ -156,6 +171,8 @@ export async function uploadDocument(req: AuthRequest, res: Response, next: Next
     const folderIdValue = folder_id || folderId;
     const file = (req as any).file;
     if (!file) throw new ValidationError('File is required');
+
+    const conflict = (req.query.conflict as string) || 'replace';
 
     if (folderIdValue) {
       const perm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, folderIdValue as string);
@@ -172,23 +189,32 @@ export async function uploadDocument(req: AuthRequest, res: Response, next: Next
     const destPath = path.join(getStoragePath(), storageName);
     fs.renameSync(file.path, destPath);
 
-    // Replace-by-name: if a document with the same name exists in the same folder,
-    // soft-delete the old document so the new file replaces it
     const docName = name || file.originalname;
     const existingDoc = await findDocumentByFolderAndName(folderIdValue || null, docName);
+
+    let finalName = docName;
+
     if (existingDoc) {
-      await softDeleteDocument(existingDoc.id);
-      await logActivity({
-        document_id: existingDoc.id,
-        actor_id: ctx.userId,
-        action: 'replaced_by_upload',
-        metadata: { replaced_by_name: docName },
-      });
+      if (conflict === 'replace') {
+        // Replace-by-name: soft-delete old document so the new file replaces it
+        await softDeleteDocument(existingDoc.id);
+        await logActivity({
+          document_id: existingDoc.id,
+          actor_id: ctx.userId,
+          action: 'replaced_by_upload',
+          metadata: { replaced_by_name: docName },
+        });
+      } else if (conflict === 'duplicate') {
+        // Generate a unique name with (1), (2), etc.
+        finalName = await getUniqueDocumentName(folderIdValue || null, docName);
+      }
+      // conflict=prompt: frontend checks via check-duplicate endpoint before uploading,
+      // so no server-side action is needed here; proceed with original docName
     }
 
     const doc = await createDocument({
       folder_id: folderIdValue || null,
-      name: docName,
+      name: finalName,
       mime_type: file.mimetype,
       size_bytes: file.size,
       storage_path: storageName,
@@ -205,6 +231,35 @@ export async function uploadDocument(req: AuthRequest, res: Response, next: Next
 
     await logActivity({ document_id: doc.id, actor_id: ctx.userId, action: 'upload', metadata: { size: file.size, mime_type: file.mimetype } });
     res.status(201).json({ document: doc });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /documents/check-duplicate?folder_id=X&name=filename.docx
+ * Returns { exists: true, document: { id, name, size_bytes, updated_at } } or { exists: false }
+ */
+export async function checkDocumentDuplicate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    const folderId = (req.query.folder_id as string) || null;
+    const name = req.query.name as string;
+    if (!name) throw new ValidationError('name query parameter is required');
+
+    const doc = await findDocumentByFolderAndName(folderId, name);
+    if (doc) {
+      return res.json({
+        exists: true,
+        document: {
+          id: doc.id,
+          name: doc.name,
+          size_bytes: doc.size_bytes,
+          updated_at: doc.updated_at,
+        },
+      });
+    }
+    res.json({ exists: false });
   } catch (err) {
     next(err);
   }
