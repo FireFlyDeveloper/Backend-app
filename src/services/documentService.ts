@@ -382,6 +382,32 @@ export async function grantPermission(data: {
   inherit?: boolean;
   granted_by: string;
 }): Promise<DocumentPermission> {
+  // Upsert: check for existing permission for this subject+scope, update or insert
+  const existing = await query(
+    `SELECT id FROM document_permissions
+     WHERE document_id IS NOT DISTINCT FROM $1
+       AND folder_id IS NOT DISTINCT FROM $2
+       AND user_id IS NOT DISTINCT FROM $3
+       AND role_id IS NOT DISTINCT FROM $4`,
+    [
+      data.document_id || null,
+      data.folder_id || null,
+      data.user_id || null,
+      data.role_id || null,
+    ]
+  );
+
+  if (existing.rows.length > 0) {
+    const result = await query(
+      `UPDATE document_permissions
+       SET permission = $1, inherit = $2, granted_by = $3, granted_at = now()
+       WHERE id = $4
+       RETURNING *`,
+      [data.permission, data.inherit ?? true, data.granted_by, existing.rows[0].id]
+    );
+    return result.rows[0];
+  }
+
   const result = await query(
     `INSERT INTO document_permissions (document_id, folder_id, user_id, role_id, permission, inherit, granted_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7)

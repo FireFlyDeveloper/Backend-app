@@ -98,6 +98,20 @@ export async function up(client: PoolClient): Promise<void> {
     await client.query(`CREATE INDEX idx_doc_perm_role_id ON document_permissions(role_id) WHERE role_id IS NOT NULL`);
   }
 
+  // Unique constraints to prevent duplicate permission grants
+  if (!(await indexExists(client, 'uq_doc_perm_doc_user'))) {
+    await client.query(`CREATE UNIQUE INDEX uq_doc_perm_doc_user ON document_permissions(document_id, user_id) WHERE document_id IS NOT NULL AND user_id IS NOT NULL`);
+  }
+  if (!(await indexExists(client, 'uq_doc_perm_doc_role'))) {
+    await client.query(`CREATE UNIQUE INDEX uq_doc_perm_doc_role ON document_permissions(document_id, role_id) WHERE document_id IS NOT NULL AND role_id IS NOT NULL`);
+  }
+  if (!(await indexExists(client, 'uq_doc_perm_folder_user'))) {
+    await client.query(`CREATE UNIQUE INDEX uq_doc_perm_folder_user ON document_permissions(folder_id, user_id) WHERE folder_id IS NOT NULL AND user_id IS NOT NULL`);
+  }
+  if (!(await indexExists(client, 'uq_doc_perm_folder_role'))) {
+    await client.query(`CREATE UNIQUE INDEX uq_doc_perm_folder_role ON document_permissions(folder_id, role_id) WHERE folder_id IS NOT NULL AND role_id IS NOT NULL`);
+  }
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS document_activity_logs (
       id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

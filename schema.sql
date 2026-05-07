@@ -156,6 +156,12 @@ CREATE INDEX IF NOT EXISTS idx_doc_perm_folder_id ON document_permissions(folder
 CREATE INDEX IF NOT EXISTS idx_doc_perm_user_id ON document_permissions(user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_doc_perm_role_id ON document_permissions(role_id) WHERE role_id IS NOT NULL;
 
+-- One permission per subject+scope. Duplicates trigger ON CONFLICT in grantPermission().
+CREATE UNIQUE INDEX IF NOT EXISTS uq_doc_perm_doc_user ON document_permissions(document_id, user_id) WHERE document_id IS NOT NULL AND user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_doc_perm_doc_role ON document_permissions(document_id, role_id) WHERE document_id IS NOT NULL AND role_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_doc_perm_folder_user ON document_permissions(folder_id, user_id) WHERE folder_id IS NOT NULL AND user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_doc_perm_folder_role ON document_permissions(folder_id, role_id) WHERE folder_id IS NOT NULL AND role_id IS NOT NULL;
+
 -- Activity log for document and folder events.
 CREATE TABLE IF NOT EXISTS document_activity_logs (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
