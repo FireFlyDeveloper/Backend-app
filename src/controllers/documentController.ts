@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../utils/config';
+import { query } from '../utils/db';
 import {
   listVisibleFolders,
   createFolder,
@@ -417,8 +418,19 @@ export async function getDocumentPermissions(req: AuthRequest, res: Response, ne
     const doc = await getDocumentById(req.params.id as string);
     const perm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
     if (!perm || (perm !== 'manager' && !ctx.isAdmin)) throw new ForbiddenError('Manager permission required');
+
     const permissions = await listDocumentPermissions(req.params.id as string);
-    res.json({ permissions });
+
+    // Fetch the owner's user info
+    const ownerResult = await query(
+      `SELECT id, display_name, email FROM users WHERE id = $1`,
+      [doc.uploaded_by]
+    );
+
+    res.json({
+      permissions,
+      owner: ownerResult.rows.length > 0 ? ownerResult.rows[0] : null,
+    });
   } catch (err) {
     next(err);
   }

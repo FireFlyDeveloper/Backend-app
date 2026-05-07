@@ -345,7 +345,14 @@ export async function listDocumentVersions(documentId: string): Promise<Document
 
 export async function listDocumentPermissions(documentId: string): Promise<DocumentPermission[]> {
   const result = await query(
-    `SELECT * FROM document_permissions WHERE document_id = $1`,
+    `SELECT dp.*,
+            u.display_name AS user_display_name,
+            u.email AS user_email,
+            r.name AS role_name
+     FROM document_permissions dp
+     LEFT JOIN users u ON u.id = dp.user_id
+     LEFT JOIN roles r ON r.id = dp.role_id
+     WHERE dp.document_id = $1`,
     [documentId]
   );
   return result.rows;
@@ -353,7 +360,14 @@ export async function listDocumentPermissions(documentId: string): Promise<Docum
 
 export async function listFolderPermissions(folderId: string): Promise<DocumentPermission[]> {
   const result = await query(
-    `SELECT * FROM document_permissions WHERE folder_id = $1`,
+    `SELECT dp.*,
+            u.display_name AS user_display_name,
+            u.email AS user_email,
+            r.name AS role_name
+     FROM document_permissions dp
+     LEFT JOIN users u ON u.id = dp.user_id
+     LEFT JOIN roles r ON r.id = dp.role_id
+     WHERE dp.folder_id = $1`,
     [folderId]
   );
   return result.rows;

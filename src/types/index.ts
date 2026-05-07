@@ -108,6 +108,10 @@ export interface DocumentPermission {
   inherit: boolean;
   granted_by: string;
   granted_at: Date;
+  // JOINed from users/roles
+  user_display_name?: string;
+  user_email?: string;
+  role_name?: string;
 }
 
 export interface DocumentActivityLog {
