@@ -29,6 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
+app.use('/', publicRoutes);
 app.use('/', documentRoutes);
 app.use('/', inventoryRoutes);
 app.use('/ble', bleRoutes);
@@ -36,7 +37,6 @@ app.use('/devices', deviceRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/audit-logs', auditRoutes);
 app.use('/reports', reportRoutes);
-app.use('/', publicRoutes);
 
 // Route aliases for spec compliance
 app.get('/inventory', (req, res) => res.redirect(307, '/items'));
