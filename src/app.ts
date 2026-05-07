@@ -11,6 +11,7 @@ import deviceRoutes from './routes/devices';
 import dashboardRoutes from './routes/dashboard';
 import auditRoutes from './routes/audit';
 import reportRoutes from './routes/reports';
+import publicRoutes from './routes/public';
 import { errorHandler } from './middleware/errorHandler';
 import { initMqtt } from './services/mqttService';
 import { initWebSocket } from './services/websocketService';
@@ -35,6 +36,7 @@ app.use('/devices', deviceRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/audit-logs', auditRoutes);
 app.use('/reports', reportRoutes);
+app.use('/', publicRoutes);
 
 // Route aliases for spec compliance
 app.get('/inventory', (req, res) => res.redirect(307, '/items'));

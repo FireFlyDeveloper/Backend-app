@@ -12,6 +12,7 @@ import {
   softDeleteFolder,
   listDocumentsInFolder,
   getDocumentById,
+  findDocumentByFolderAndName,
   createDocument,
   softDeleteDocument,
   renameDocument,
@@ -171,9 +172,23 @@ export async function uploadDocument(req: AuthRequest, res: Response, next: Next
     const destPath = path.join(getStoragePath(), storageName);
     fs.renameSync(file.path, destPath);
 
+    // Replace-by-name: if a document with the same name exists in the same folder,
+    // soft-delete the old document so the new file replaces it
+    const docName = name || file.originalname;
+    const existingDoc = await findDocumentByFolderAndName(folderIdValue || null, docName);
+    if (existingDoc) {
+      await softDeleteDocument(existingDoc.id);
+      await logActivity({
+        document_id: existingDoc.id,
+        actor_id: ctx.userId,
+        action: 'replaced_by_upload',
+        metadata: { replaced_by_name: docName },
+      });
+    }
+
     const doc = await createDocument({
       folder_id: folderIdValue || null,
-      name: name || file.originalname,
+      name: docName,
       mime_type: file.mimetype,
       size_bytes: file.size,
       storage_path: storageName,

@@ -230,6 +230,14 @@ export async function getDocumentById(id: string): Promise<Document> {
   return result.rows[0];
 }
 
+export async function findDocumentByFolderAndName(folderId: string | null, name: string): Promise<Document | null> {
+  const result = await query(
+    `SELECT * FROM documents WHERE folder_id IS NOT DISTINCT FROM $1 AND name = $2 AND deleted_at IS NULL LIMIT 1`,
+    [folderId, name]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 export async function createDocument(data: {
   folder_id?: string | null;
   name: string;

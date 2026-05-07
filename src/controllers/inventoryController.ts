@@ -22,6 +22,11 @@ import {
   ReturnLine,
 } from '../services/inventoryService';
 import { ValidationError, ForbiddenError, NotFoundError } from '../utils/errors';
+import {
+  notifyCheckoutCreated,
+  notifyCheckoutApproved,
+  notifyCheckoutRejected,
+} from '../services/emailService';
 
 function getUserContext(req: AuthRequest) {
   const user = req.user;
@@ -252,6 +257,17 @@ export async function postCheckout(req: AuthRequest, res: Response, next: NextFu
       metadata: { items: result.items.map((i) => ({ lot_id: i.lot_id, qty: i.quantity_out })), status: result.transaction.status },
     });
 
+    // Notify admin/staff if this is a pending approval checkout request
+    if (result.transaction.status === 'pending_approval' && req.user) {
+      // Don't await — fire and forget to avoid slowing the response
+      notifyCheckoutCreated(
+        req.user.display_name,
+        req.user.email,
+        result.transaction.id,
+        result.items.length
+      ).catch((err) => console.error('[EMAIL] Failed to notify checkout created:', err));
+    }
+
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -312,6 +328,12 @@ export async function postApproveCheckout(req: AuthRequest, res: Response, next:
       entity_id: checkoutId,
     });
 
+    // Notify the requester that their checkout was approved
+    notifyCheckoutApproved(
+      transaction.checked_out_by,
+      checkoutId
+    ).catch((err) => console.error('[EMAIL] Failed to notify checkout approved:', err));
+
     res.json({ transaction });
   } catch (err) {
     next(err);
@@ -334,6 +356,12 @@ export async function postRejectCheckout(req: AuthRequest, res: Response, next: 
       entity_type: 'checkout_transaction',
       entity_id: checkoutId,
     });
+
+    // Notify the requester that their checkout was rejected
+    notifyCheckoutRejected(
+      transaction.checked_out_by,
+      checkoutId
+    ).catch((err) => console.error('[EMAIL] Failed to notify checkout rejected:', err));
 
     res.json({ transaction });
   } catch (err) {

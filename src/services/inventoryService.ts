@@ -480,7 +480,11 @@ export async function listCheckouts(filters: {
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await query(
-    `SELECT DISTINCT ct.* FROM checkout_transactions ct ${joinClause} ${whereClause} ORDER BY ct.created_at DESC`,
+    `SELECT DISTINCT ct.*, u.display_name as checked_out_by_name
+     FROM checkout_transactions ct
+     ${joinClause}
+     LEFT JOIN users u ON u.id = ct.checked_out_by
+     ${whereClause} ORDER BY ct.created_at DESC`,
     values
   );
   return result.rows;

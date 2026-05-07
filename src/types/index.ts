@@ -158,6 +158,7 @@ export type CheckoutStatus = 'pending_approval' | 'open' | 'partially_returned' 
 export interface CheckoutTransaction {
   id: string;
   checked_out_by: string;
+  checked_out_by_name?: string;
   processed_by: string | null;
   status: CheckoutStatus;
   notes: string | null;
