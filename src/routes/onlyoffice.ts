@@ -24,10 +24,10 @@ router.post('/onlyoffice/config/:docId', authenticate, async (req: AuthRequest, 
     // Check permission
     const perm = await resolveDocumentPermission(user.id, user.roles, user.roles.includes('admin'), doc.id);
     if (!perm && !user.roles.includes('admin')) {
-      throw new ForbiddenError('No permission to edit this document');
+      throw new ForbiddenError('No permission to view this document');
     }
 
-    const editorConfig = generateEditorConfig(doc, user.display_name, user.id);
+    const editorConfig = generateEditorConfig(doc, user.display_name, user.id, perm || 'viewer');
 
     res.json({
       config: editorConfig,

@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../utils/config';
-import { Document } from '../types';
+import { Document, PermissionLevel } from '../types';
 
 export interface OnlyOfficeEditorConfig {
   document: {
@@ -8,6 +8,10 @@ export interface OnlyOfficeEditorConfig {
     key: string;
     title: string;
     fileType: string;
+    permissions?: {
+      edit?: boolean;
+      download?: boolean;
+    };
   };
   documentType: 'word' | 'cell' | 'slide';
   editorConfig: {
@@ -24,7 +28,8 @@ export interface OnlyOfficeEditorConfig {
 export function generateEditorConfig(
   doc: Document,
   userName: string,
-  userId: string
+  userId: string,
+  permissionLevel?: PermissionLevel
 ): OnlyOfficeEditorConfig {
   const downloadUrl = `${config.appUrl}/documents/${doc.id}/download`;
   const callbackUrl = `${config.appUrl}/onlyoffice/callback`;
@@ -44,12 +49,18 @@ export function generateEditorConfig(
   // Unique key based on document id + version so ONLYOFFICE knows when to reload
   const key = `${doc.id}_v${doc.version}`;
 
+  // Restrict editing for viewer-level users
+  const docPermissions = permissionLevel === 'viewer'
+    ? { edit: false, download: true }
+    : undefined;
+
   const payload = {
     document: {
       url: downloadUrl,
       key,
       title: doc.name,
       fileType: ext,
+      permissions: docPermissions,
     },
     documentType,
     editorConfig: {
@@ -73,6 +84,7 @@ export function generateEditorConfig(
       key,
       title: doc.name,
       fileType: ext,
+      ...(docPermissions ? { permissions: docPermissions } : {}),
     },
     documentType,
     editorConfig: {
