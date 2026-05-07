@@ -474,6 +474,29 @@ export async function searchDocuments(queryStr: string, userId: string, userRole
   return accessible;
 }
 
+export async function listAllAccessibleDocuments(
+  userId: string,
+  userRoles: string[],
+  isAdmin: boolean
+): Promise<Document[]> {
+  if (isAdmin) {
+    const result = await query(
+      `SELECT * FROM documents WHERE deleted_at IS NULL ORDER BY updated_at DESC`
+    );
+    return result.rows;
+  }
+
+  const result = await query(
+    `SELECT * FROM documents WHERE deleted_at IS NULL ORDER BY updated_at DESC`
+  );
+  const accessible: Document[] = [];
+  for (const doc of result.rows) {
+    const perm = await resolveDocumentPermission(userId, userRoles, isAdmin, doc.id);
+    if (perm) accessible.push(doc);
+  }
+  return accessible;
+}
+
 // --- Storage helpers ---
 
 export function getStoragePath(): string {

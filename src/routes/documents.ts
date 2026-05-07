@@ -14,6 +14,7 @@ import {
   getDocumentVersions,
   getDocumentActivity,
   getDocumentSearch,
+  getAllDocuments,
   getDocumentPermissions,
   postDocumentPermission,
   deleteDocumentPermission,
@@ -40,6 +41,7 @@ router.post('/folders/:id/permissions', postFolderPermission);
 router.delete('/folders/:id/permissions/:pid', deleteFolderPermission);
 
 // Documents
+router.get('/documents', getAllDocuments);
 router.get('/documents/search', getDocumentSearch);
 router.post('/documents/upload', upload.single('file'), uploadDocument);
 router.get('/documents/check-duplicate', checkDocumentDuplicate);

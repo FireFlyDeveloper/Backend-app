@@ -12,6 +12,7 @@ import {
   moveFolder,
   softDeleteFolder,
   listDocumentsInFolder,
+  listAllAccessibleDocuments,
   getDocumentById,
   findDocumentByFolderAndName,
   createDocument,
@@ -133,18 +134,35 @@ export async function getFolderDocuments(req: AuthRequest, res: Response, next: 
   try {
     const ctx = getUserContext(req);
     const folderId = req.params.id as string;
-    const perm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, folderId);
-    if (!perm && !ctx.isAdmin) {
-      const docs = await listDocumentsInFolder(folderId);
-      const accessible = [];
-      for (const doc of docs) {
-        const dp = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
-        if (dp) accessible.push(doc);
+    const folderPerm = await resolveFolderPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, folderId);
+
+    const docs = await listDocumentsInFolder(folderId);
+    const enriched = [];
+
+    for (const doc of docs) {
+      const userPerm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
+      if (folderPerm || ctx.isAdmin || userPerm) {
+        enriched.push({ ...doc, user_permission: userPerm || 'viewer' });
       }
-      return res.json({ documents: accessible });
     }
-    const documents = await listDocumentsInFolder(folderId);
-    res.json({ documents });
+
+    res.json({ documents: enriched });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getAllDocuments(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const ctx = getUserContext(req);
+    const docs = await listAllAccessibleDocuments(ctx.userId, ctx.userRoles, ctx.isAdmin);
+    // Attach user_permission to each doc
+    const enriched = [];
+    for (const doc of docs) {
+      const userPerm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
+      enriched.push({ ...doc, user_permission: userPerm || 'viewer' });
+    }
+    res.json({ documents: enriched });
   } catch (err) {
     next(err);
   }
@@ -404,7 +422,13 @@ export async function getDocumentSearch(req: AuthRequest, res: Response, next: N
       throw new ValidationError('q parameter is required');
     }
     const documents = await searchDocuments(q.trim(), ctx.userId, ctx.userRoles, ctx.isAdmin);
-    res.json({ documents });
+    // Attach user_permission
+    const enriched = [];
+    for (const doc of documents) {
+      const userPerm = await resolveDocumentPermission(ctx.userId, ctx.userRoles, ctx.isAdmin, doc.id);
+      enriched.push({ ...doc, user_permission: userPerm || 'viewer' });
+    }
+    res.json({ documents: enriched });
   } catch (err) {
     next(err);
   }
