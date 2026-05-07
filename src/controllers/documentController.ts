@@ -456,7 +456,7 @@ export async function postDocumentPermission(req: AuthRequest, res: Response, ne
       throw new ForbiddenError('Only admins can grant manager permission');
     }
 
-    const dp = await grantPermission({
+    const { permission: dp, created } = await grantPermission({
       document_id: req.params.id as string,
       user_id: user_id || null,
       role_id: role_id || null,
@@ -466,7 +466,7 @@ export async function postDocumentPermission(req: AuthRequest, res: Response, ne
     });
 
     await logActivity({ document_id: doc.id, actor_id: ctx.userId, action: 'permission_change', metadata: { permission_id: dp.id, granted: permission } });
-    res.status(201).json({ permission: dp });
+    res.status(201).json({ permission: dp, created });
   } catch (err) {
     next(err);
   }
@@ -517,7 +517,7 @@ export async function postFolderPermission(req: AuthRequest, res: Response, next
       throw new ForbiddenError('Only admins can grant manager permission');
     }
 
-    const dp = await grantPermission({
+    const { permission: dp, created } = await grantPermission({
       folder_id: req.params.id as string,
       user_id: user_id || null,
       role_id: role_id || null,
@@ -527,7 +527,7 @@ export async function postFolderPermission(req: AuthRequest, res: Response, next
     });
 
     await logActivity({ folder_id: req.params.id as string, actor_id: ctx.userId, action: 'permission_change', metadata: { permission_id: dp.id } });
-    res.status(201).json({ permission: dp });
+    res.status(201).json({ permission: dp, created });
   } catch (err) {
     next(err);
   }

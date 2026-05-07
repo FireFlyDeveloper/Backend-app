@@ -381,7 +381,7 @@ export async function grantPermission(data: {
   permission: PermissionLevel;
   inherit?: boolean;
   granted_by: string;
-}): Promise<DocumentPermission> {
+}): Promise<{ permission: DocumentPermission; created: boolean }> {
   // Upsert: check for existing permission for this subject+scope, update or insert
   const existing = await query(
     `SELECT id FROM document_permissions
@@ -405,7 +405,7 @@ export async function grantPermission(data: {
        RETURNING *`,
       [data.permission, data.inherit ?? true, data.granted_by, existing.rows[0].id]
     );
-    return result.rows[0];
+    return { permission: result.rows[0], created: false };
   }
 
   const result = await query(
@@ -422,7 +422,7 @@ export async function grantPermission(data: {
       data.granted_by,
     ]
   );
-  return result.rows[0];
+  return { permission: result.rows[0], created: true };
 }
 
 export async function revokePermission(id: string): Promise<void> {
