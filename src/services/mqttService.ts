@@ -30,7 +30,10 @@ export function initMqtt(): mqtt.MqttClient {
 
   client.on('message', async (topic, message) => {
     try {
-      const payload = JSON.parse(message.toString());
+      const raw = message.toString();
+      // Strip control characters (except \t, \n) that break JSON.parse
+      const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+      const payload = JSON.parse(cleaned);
       if (topic === config.mqttBleTopic) {
         // BLE topic carries both scan events and heartbeats
         if (isHeartbeatPayload(payload)) {
