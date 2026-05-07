@@ -1,7 +1,7 @@
 import { query, withTransaction } from '../utils/db';
 import { hashPassword } from '../utils/password';
 import { SafeUser, UserWithRoles, PaginatedUsers, UserRoleDetail } from '../types';
-import { NotFoundError, ConflictError } from '../utils/errors';
+import { NotFoundError, ConflictError, ValidationError } from '../utils/errors';
 
 function mapUserRow(row: any): UserWithRoles {
   const roles: UserRoleDetail[] = row.role_ids
@@ -152,7 +152,7 @@ export async function createUser(data: {
       const userId = result.rows[0].id;
 
       if (data.role_ids && data.role_ids.length > 0) {
-        const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+        const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1) AND name != 'student'`, [data.role_ids]);
         const validRoleIds = validRoles.rows.map((r) => r.id);
         for (const roleId of validRoleIds) {
           await query(
@@ -178,7 +178,7 @@ export async function createUser(data: {
 
   // Assign roles if provided
   if (data.role_ids && data.role_ids.length > 0) {
-    const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+    const validRoles = await query(`SELECT id FROM roles WHERE id = ANY($1) AND name != 'student'`, [data.role_ids]);
     const validRoleIds = validRoles.rows.map((r) => r.id);
     for (const roleId of validRoleIds) {
       await query(
@@ -240,7 +240,7 @@ export async function updateUser(
     await withTransaction(async (client) => {
       await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [id]);
       if (data.role_ids!.length > 0) {
-        const validRoles = await client.query(`SELECT id FROM roles WHERE id = ANY($1)`, [data.role_ids]);
+        const validRoles = await client.query(`SELECT id FROM roles WHERE id = ANY($1) AND name != 'student'`, [data.role_ids]);
         const validRoleIds = validRoles.rows.map((r) => r.id);
         for (const roleId of validRoleIds) {
           await client.query(
@@ -268,8 +268,9 @@ export async function assignRole(userId: string, roleId: string, assignedBy: str
     const userCheck = await client.query(`SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL`, [userId]);
     if (userCheck.rows.length === 0) throw new NotFoundError('User not found');
 
-    const roleCheck = await client.query(`SELECT id FROM roles WHERE id = $1`, [roleId]);
+    const roleCheck = await client.query(`SELECT id, name FROM roles WHERE id = $1`, [roleId]);
     if (roleCheck.rows.length === 0) throw new NotFoundError('Role not found');
+    if (roleCheck.rows[0].name === 'student') throw new ValidationError('Student role has been removed');
 
     await client.query(
       `INSERT INTO user_roles (user_id, role_id, assigned_by)
@@ -289,6 +290,6 @@ export async function removeRole(userId: string, roleId: string): Promise<void> 
 }
 
 export async function listRoles(): Promise<{ id: string; name: string; description: string | null; can_checkout_quantifiable: boolean }[]> {
-  const result = await query(`SELECT id, name, description, can_checkout_quantifiable FROM roles ORDER BY name`);
+  const result = await query(`SELECT id, name, description, can_checkout_quantifiable FROM roles WHERE name != 'student' ORDER BY name`);
   return result.rows;
 }
