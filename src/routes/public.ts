@@ -16,21 +16,15 @@ const PUBLIC_BORROWER_EMAIL = 'public-borrower@system';
 const PUBLIC_BORROWER_NAME = 'Public Borrower';
 
 async function getPublicBorrowerId(): Promise<string> {
+  // Use INSERT ... ON CONFLICT to handle concurrent requests safely
   const result = await query(
-    `SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL`,
-    [PUBLIC_BORROWER_EMAIL]
-  );
-  if (result.rows.length > 0) {
-    return result.rows[0].id;
-  }
-  // Create the public borrower system user
-  const createResult = await query(
     `INSERT INTO users (email, display_name, password_hash, is_active)
      VALUES ($1, $2, '', true)
+     ON CONFLICT (email) DO UPDATE SET updated_at = now()
      RETURNING id`,
     [PUBLIC_BORROWER_EMAIL, PUBLIC_BORROWER_NAME]
   );
-  return createResult.rows[0].id;
+  return result.rows[0].id;
 }
 
 // ── Public endpoints (no auth required) ─────────────────────────────
