@@ -9,8 +9,10 @@ export interface OnlyOfficeEditorConfig {
     title: string;
     fileType: string;
   };
+  documentType: 'word' | 'cell' | 'slide';
   editorConfig: {
     lang: string;
+    callbackUrl: string;
     user: {
       id: string;
       name: string;
@@ -25,10 +27,19 @@ export function generateEditorConfig(
   userId: string
 ): OnlyOfficeEditorConfig {
   const downloadUrl = `${config.appUrl}/documents/${doc.id}/download`;
+  const callbackUrl = `${config.appUrl}/onlyoffice/callback`;
 
-  // Derive file extension from mime type or name
+  // Derive file extension from name
   const parts = doc.name.split('.');
-  const fileType = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'docx';
+  const ext = (parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'docx');
+
+  // Map extension to ONLYOFFICE documentType
+  const docTypeMap: Record<string, 'word' | 'cell' | 'slide'> = {
+    docx: 'word', doc: 'word', docm: 'word', dotx: 'word', dotm: 'word', odt: 'word', rtf: 'word', txt: 'word',
+    xlsx: 'cell', xls: 'cell', xlsm: 'cell', xltx: 'cell', xltm: 'cell', ods: 'cell', csv: 'cell',
+    pptx: 'slide', ppt: 'slide', pptm: 'slide', ppsx: 'slide', ppsm: 'slide', odp: 'slide',
+  };
+  const documentType = docTypeMap[ext] || 'word';
 
   // Unique key based on document id + version so ONLYOFFICE knows when to reload
   const key = `${doc.id}_v${doc.version}`;
@@ -38,9 +49,12 @@ export function generateEditorConfig(
       url: downloadUrl,
       key,
       title: doc.name,
+      fileType: ext,
     },
+    documentType,
     editorConfig: {
       lang: 'en',
+      callbackUrl,
       user: {
         id: userId,
         name: userName,
@@ -58,10 +72,12 @@ export function generateEditorConfig(
       url: downloadUrl,
       key,
       title: doc.name,
-      fileType,
+      fileType: ext,
     },
+    documentType,
     editorConfig: {
       lang: 'en',
+      callbackUrl,
       user: {
         id: userId,
         name: userName,

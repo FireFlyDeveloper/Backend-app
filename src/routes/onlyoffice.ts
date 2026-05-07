@@ -7,6 +7,7 @@ import https from 'https';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getDocumentById, resolveDocumentPermission, updateDocumentVersion, createDocumentVersion, logActivity, getStoragePath } from '../services/documentService';
 import { generateEditorConfig, verifyCallbackToken, OnlyOfficeCallbackBody } from '../services/onlyofficeService';
+import { config } from '../utils/config';
 import { ForbiddenError } from '../utils/errors';
 
 const router = Router();
@@ -28,7 +29,10 @@ router.post('/onlyoffice/config/:docId', authenticate, async (req: AuthRequest, 
 
     const editorConfig = generateEditorConfig(doc, user.display_name, user.id);
 
-    res.json({ config: editorConfig });
+    res.json({
+      config: editorConfig,
+      documentServerUrl: config.officeDocServerUrl,
+    });
   } catch (err) {
     next(err);
   }
