@@ -65,8 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
 -- Seed default roles
 INSERT INTO roles (name, description, can_checkout_quantifiable) VALUES
   ('admin',   'Full system access',                    true),
-  ('staff',   'Inventory and document management',     true),
-  ('student', 'Limited access per policy',             false)
+  ('staff',   'Inventory and document management',     true)
 ON CONFLICT (name) DO NOTHING;
 
 -- Trigger: auto-update users.updated_at
