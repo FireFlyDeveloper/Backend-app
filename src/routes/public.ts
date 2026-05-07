@@ -59,7 +59,7 @@ router.get('/public/items', async (req: Request, res: Response, next: NextFuncti
  */
 router.get('/public/items/:id/lots', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const lots = await listLotsByItem(req.params.id);
+    const lots = await listLotsByItem(req.params.id as string);
     res.json({ lots });
   } catch (err) {
     next(err);
