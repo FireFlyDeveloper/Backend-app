@@ -38,6 +38,25 @@ router.post('/onlyoffice/config/:docId', authenticate, async (req: AuthRequest, 
   }
 });
 
+// GET /onlyoffice/files/:docId/download — serve file to ONLYOFFICE Document Server (no app auth)
+router.get('/onlyoffice/files/:docId/download', async (req: Request, res: Response, next) => {
+  try {
+    const docId = req.params.docId as string;
+    const doc = await getDocumentById(docId);
+    const filePath = path.join(getStoragePath(), doc.storage_path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+
+    res.setHeader('Content-Type', doc.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /onlyoffice/callback — receives saved file from ONLYOFFICE Document Server (no auth)
 function downloadFile(fileUrl: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {

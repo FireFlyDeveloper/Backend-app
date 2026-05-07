@@ -31,7 +31,7 @@ export function generateEditorConfig(
   userId: string,
   permissionLevel?: PermissionLevel
 ): OnlyOfficeEditorConfig {
-  const downloadUrl = `${config.appUrl}/documents/${doc.id}/download`;
+  const downloadUrl = `${config.appUrl}/onlyoffice/files/${doc.id}/download`;
   const callbackUrl = `${config.appUrl}/onlyoffice/callback`;
 
   // Derive file extension from name
