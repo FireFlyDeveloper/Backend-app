@@ -5,11 +5,17 @@ dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 300_000,    // 5 minutes — don't kill idle connections too fast
+  connectionTimeoutMillis: 10_000, // 10s timeout for new connections
+  // Keep connections alive
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 60_000,
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected DB error', err);
-  process.exit(-1);
+  console.error('DB pool error (non-fatal):', err.message);
+  // Don't exit — the pool will recreate connections as needed
 });
 
 export async function query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {

@@ -23,7 +23,10 @@ import { query } from './utils/db';
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: config.frontendUrl,
+  credentials: true,
+}));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

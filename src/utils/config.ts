@@ -24,4 +24,5 @@ export const config = {
   officeDocServerUrl: process.env.OFFICE_DOC_SERVER_URL || 'http://localhost:8080',
   officeJwtSecret: process.env.OFFICE_JWT_SECRET || 'office-secret-change-me',
   appUrl: process.env.APP_URL || 'http://localhost:3000',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 };
