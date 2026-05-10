@@ -24,7 +24,22 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    const allowed = config.corsOrigins;
+    const match = allowed.some(a => {
+      if (typeof a === 'string') return origin === a;
+      return a.test(origin);
+    });
+
+    if (match) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   credentials: true,
 }));
 app.use(morgan('dev'));
