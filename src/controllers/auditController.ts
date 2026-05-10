@@ -85,7 +85,10 @@ export async function getAuditLogs(req: AuthRequest, res: Response, next: NextFu
     const total = parseInt(countResult.rows[0].count, 10);
 
     const result = await query(
-      `SELECT * FROM audit_logs ${whereClause} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      `SELECT al.*, u.display_name as actor_display_name
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.actor_id
+       ${whereClause} ORDER BY al.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
       [...values, limitNum, offset]
     );
 
@@ -95,7 +98,7 @@ export async function getAuditLogs(req: AuthRequest, res: Response, next: NextFu
       entityType: r.entity_type,
       action: r.action,
       actorId: r.actor_id,
-      actorName: r.actor_id || 'System',
+      actorName: r.actor_display_name || (r.actor_id ? r.actor_id.slice(0, 8) + '...' : 'System'),
       entityId: r.entity_id,
       metadata: r.after_state || r.before_state || null,
       createdAt: r.created_at,

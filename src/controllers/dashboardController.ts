@@ -35,7 +35,20 @@ function formatDescription(
 
   const itemType = meta.item_type ? ` (${meta.item_type})` : '';
   const status = meta.status ? ` — ${meta.status}` : '';
-  const notes = meta.notes ? `: ${meta.notes}` : '';
+  const rawNotes = typeof meta.notes === 'string' ? meta.notes : '';
+  // Try to parse JSON notes (e.g. student info from public borrow)
+  let notesStr = '';
+  if (rawNotes.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawNotes);
+      if (parsed.name) notesStr = ` by ${parsed.name}`;
+      else if (parsed.srcode) notesStr = ` (SR-Code: ${parsed.srcode})`;
+    } catch {
+      notesStr = rawNotes ? `: ${rawNotes}` : '';
+    }
+  } else {
+    notesStr = rawNotes ? `: ${rawNotes}` : '';
+  }
   const size =
     typeof meta.size === 'number'
       ? ` (${(meta.size / 1024).toFixed(1)} KB${meta.mime_type ? `, ${meta.mime_type}` : ''})`
@@ -51,7 +64,7 @@ function formatDescription(
     case action === 'delete' && entityType === 'item':
       return `Deleted item${name ? `: ${name}` : ''}`;
     case action === 'checkout':
-      return `Checkout transaction${status}${notes}`;
+      return `Checkout transaction${status}${notesStr}`;
     case action === 'upload' || (action === 'create' && entityType === 'document'):
       return `Uploaded document${name ? `: ${name}` : ''}${size}`;
     case action === 'download':
@@ -153,11 +166,24 @@ export async function getRecentActivity(req: AuthRequest, res: Response, next: N
     `, [safeLimit]);
 
     // Map to frontend expected shape
+    // Resolve actor names from users table
+    const actorIds = [...new Set(result.rows.map((r) => r.actor_id).filter(Boolean))];
+    const actorMap: Record<string, string> = {};
+    if (actorIds.length > 0) {
+      const placeholders = actorIds.map((_, i) => `$${i + 1}`).join(',');
+      const userResult = await query<{ id: string; display_name: string }>(
+        `SELECT id::text, display_name FROM users WHERE id IN (${placeholders})`
+      , actorIds);
+      for (const u of userResult.rows) {
+        actorMap[u.id] = u.display_name;
+      }
+    }
+
     const activity = result.rows.map((r) => ({
       id: r.id,
       entityType: r.entity_type || r.source,
       action: r.action,
-      actorName: r.actor_id || 'System',
+      actorName: r.actor_id ? (actorMap[r.actor_id] || r.actor_id.slice(0, 8) + '...') : 'System',
       description: r.metadata ? formatDescription(r.action, r.entity_type, r.metadata) : '',
       createdAt: r.created_at,
     }));
