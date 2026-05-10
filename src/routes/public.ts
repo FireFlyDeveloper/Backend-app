@@ -7,6 +7,7 @@ import {
 } from '../services/inventoryService';
 import { query } from '../utils/db';
 import { ValidationError } from '../utils/errors';
+import { notifyCheckoutCreated, notifyPublicBorrowerSubmitted } from '../services/emailService';
 
 const router = Router();
 
@@ -96,6 +97,14 @@ router.post('/public/borrow', async (req: Request, res: Response, next: NextFunc
       borrowerInfo,
       false
     );
+
+    // Send confirmation email to the borrower
+    notifyPublicBorrowerSubmitted(name, email, result.transaction.id)
+      .catch((err: any) => console.error('[EMAIL] Failed to notify borrower:', err));
+
+    // Notify admin/staff about the new request
+    notifyCheckoutCreated(name, email, result.transaction.id, checkoutLines.length)
+      .catch((err: any) => console.error('[EMAIL] Failed to notify admins:', err));
 
     res.status(201).json(result);
   } catch (err) {

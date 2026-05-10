@@ -26,6 +26,7 @@ import {
   notifyCheckoutCreated,
   notifyCheckoutApproved,
   notifyCheckoutRejected,
+  notifyPublicBorrowerApproved,
 } from '../services/emailService';
 
 function getUserContext(req: AuthRequest) {
@@ -329,10 +330,29 @@ export async function postApproveCheckout(req: AuthRequest, res: Response, next:
     });
 
     // Notify the requester that their checkout was approved
-    notifyCheckoutApproved(
-      transaction.checked_out_by,
-      checkoutId
-    ).catch((err) => console.error('[EMAIL] Failed to notify checkout approved:', err));
+    // Detect public borrower from notes field (contains JSON with student info)
+    const notes = transaction.notes as string | undefined;
+    if (notes && notes.trim().startsWith('{')) {
+      try {
+        const studentInfo = JSON.parse(notes);
+        if (studentInfo.email && studentInfo.name) {
+          notifyPublicBorrowerApproved(
+            studentInfo.name,
+            studentInfo.email,
+            checkoutId
+          ).catch((err) => console.error('[EMAIL] Failed to notify public borrower approved:', err));
+        } else {
+          notifyCheckoutApproved(transaction.checked_out_by, checkoutId)
+            .catch((err) => console.error('[EMAIL] Failed to notify checkout approved:', err));
+        }
+      } catch {
+        notifyCheckoutApproved(transaction.checked_out_by, checkoutId)
+          .catch((err) => console.error('[EMAIL] Failed to notify checkout approved:', err));
+      }
+    } else {
+      notifyCheckoutApproved(transaction.checked_out_by, checkoutId)
+        .catch((err) => console.error('[EMAIL] Failed to notify checkout approved:', err));
+    }
 
     res.json({ transaction });
   } catch (err) {

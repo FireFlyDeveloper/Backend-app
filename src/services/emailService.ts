@@ -170,3 +170,49 @@ export async function notifyCheckoutRejected(
 
   await sendOrLog(email, subject, text);
 }
+
+/**
+ * Notify a public borrower that their request has been submitted.
+ */
+export async function notifyPublicBorrowerSubmitted(
+  studentName: string,
+  studentEmail: string,
+  checkoutId: string
+): Promise<void> {
+  const subject = 'Borrow request submitted — Admin Records';
+  const text = [
+    `Hello ${studentName},`,
+    ``,
+    `Your borrow request (ID: ${checkoutId}) has been submitted successfully.`,
+    `Please wait for staff to review and approve your request.`,
+    `You will receive another email once it's been processed.`,
+    ``,
+    `Thank you.`,
+  ].join('\n');
+
+  await sendOrLog(studentEmail, subject, text);
+}
+
+/**
+ * Notify a public borrower that their request has been approved.
+ * Uses the student's actual email from the checkout notes.
+ */
+export async function notifyPublicBorrowerApproved(
+  studentName: string,
+  studentEmail: string,
+  checkoutId: string
+): Promise<void> {
+  const subject = 'Borrow request approved — Admin Records';
+  const text = [
+    `Hello ${studentName},`,
+    ``,
+    `Your borrow request (ID: ${checkoutId}) has been approved!`,
+    `You may now proceed to pick up the items.`,
+    ``,
+    `If you have any questions, please contact the inventory staff.`,
+    ``,
+    `Thank you.`,
+  ].join('\n');
+
+  await sendOrLog(studentEmail, subject, text);
+}
