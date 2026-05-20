@@ -343,8 +343,8 @@ export async function assignTagToItem(tagId: string, itemId: string, assignedBy:
 
     await query(
       `INSERT INTO item_location_history
-         (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
-       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag reassigned to another item')`,
+         (item_id, room_id, device_id, presence_status, rssi, conflict_meta)
+       VALUES ($1, NULL, NULL, 'unknown', NULL, '{"note": "Tag reassigned to another item"}')`,
       [oldItemId]
     );
   }
@@ -385,8 +385,8 @@ export async function unassignTag(tagId: string): Promise<any> {
 
     await query(
       `INSERT INTO item_location_history
-        (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
-       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag unassigned from item')`,
+        (item_id, room_id, device_id, presence_status, rssi, conflict_meta)
+       VALUES ($1, NULL, NULL, 'unknown', NULL, '{"note": "Tag unassigned from item"}')`,
       [oldItemId]
     );
   }
@@ -420,8 +420,8 @@ export async function softDeleteBleTag(id: string): Promise<void> {
 
     await query(
       `INSERT INTO item_location_history
-        (item_id, from_room_id, to_room_id, detected_at, device_id, rssi, conflict_flag, notes)
-       VALUES ($1, NULL, NULL, NOW(), NULL, NULL, false, 'Tag deleted — unassigned from item')`,
+        (item_id, room_id, device_id, presence_status, rssi, conflict_meta)
+       VALUES ($1, NULL, NULL, 'unknown', NULL, '{"note": "Tag deleted — unassigned from item"}')`,
       [tag.item_id]
     );
   }
