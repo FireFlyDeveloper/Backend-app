@@ -26,6 +26,7 @@ export async function listItems(filters: {
   status?: string;
   search?: string;
   room?: string;
+  expiration?: string;
 }): Promise<Item[]> {
   const conditions: string[] = ['i.deleted_at IS NULL'];
   const values: any[] = [];
@@ -51,13 +52,29 @@ export async function listItems(filters: {
 
   let joinClause = '';
   if (filters.room) {
-    joinClause = `JOIN item_presence_state ips ON ips.item_id = i.id`;
+    joinClause += ` JOIN item_presence_state ips ON ips.item_id = i.id`;
     conditions.push(`ips.current_room_id = $${idx++}`);
     values.push(filters.room);
   }
 
+  let expirationSelect = `(SELECT MIN(expires_at) FROM item_lots il WHERE il.item_id = i.id AND il.quantity_on_hand > 0) as earliest_expiration`;
+  
+  if (filters.expiration) {
+    // Requires quantifiable items that have lots
+    conditions.push(`i.item_type = 'quantifiable'`);
+    if (filters.expiration === 'expired') {
+      conditions.push(`EXISTS (SELECT 1 FROM item_lots il WHERE il.item_id = i.id AND il.quantity_on_hand > 0 AND il.expires_at < CURRENT_DATE)`);
+    } else if (filters.expiration === 'expiring_soon') {
+      conditions.push(`EXISTS (SELECT 1 FROM item_lots il WHERE il.item_id = i.id AND il.quantity_on_hand > 0 AND il.expires_at >= CURRENT_DATE AND il.expires_at < CURRENT_DATE + INTERVAL '7 days')`);
+    } else if (filters.expiration === 'expiring_month') {
+      conditions.push(`EXISTS (SELECT 1 FROM item_lots il WHERE il.item_id = i.id AND il.quantity_on_hand > 0 AND il.expires_at >= CURRENT_DATE + INTERVAL '7 days' AND il.expires_at < CURRENT_DATE + INTERVAL '30 days')`);
+    } else if (filters.expiration === 'safe') {
+      conditions.push(`NOT EXISTS (SELECT 1 FROM item_lots il WHERE il.item_id = i.id AND il.quantity_on_hand > 0 AND il.expires_at < CURRENT_DATE + INTERVAL '30 days')`);
+    }
+  }
+
   const result = await query(
-    `SELECT i.* FROM items i ${joinClause} WHERE ${conditions.join(' AND ')} ORDER BY i.name`,
+    `SELECT i.*, ${expirationSelect} FROM items i ${joinClause} WHERE ${conditions.join(' AND ')} ORDER BY i.name`,
     values
   );
   return result.rows;
@@ -270,7 +287,7 @@ export async function createCheckout(
     throw new ValidationError('At least one checkout line is required');
   }
 
-  const status = isAdminOrStaff ? 'open' : 'pending_approval';
+  const status = isAdminOrStaff ? 'open' : 'approved';
 
   return withTransaction(async (client) => {
     // Create transaction
@@ -323,7 +340,7 @@ export async function createCheckout(
       }
 
       // Only deduct stock for admin/staff immediate checkouts
-      if (isAdminOrStaff) {
+      if (status === 'open' || status === 'approved') {
         await client.query(
           `UPDATE item_lots
            SET quantity_on_hand = quantity_on_hand - $1,

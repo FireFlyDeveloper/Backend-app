@@ -42,13 +42,14 @@ function getUserContext(req: AuthRequest) {
 
 export async function getItems(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { type, category, status, search, room } = req.query;
+    const { type, category, status, search, room, expiration } = req.query;
     const items = await listItems({
       type: type as string | undefined,
       category: category as string | undefined,
       status: status as string | undefined,
       search: search as string | undefined,
       room: room as string | undefined,
+      expiration: expiration as string | undefined,
     });
     res.json({ items });
   } catch (err) {

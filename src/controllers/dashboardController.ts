@@ -105,6 +105,12 @@ export async function getDashboardStats(req: AuthRequest, res: Response, next: N
     const activeCheckoutCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM checkout_transactions WHERE status = 'open'`);
     const userCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM users WHERE deleted_at IS NULL`);
 
+    // Expiration KPIs
+    const expiredCount = await query<{ count: string }>(`SELECT COUNT(DISTINCT item_id)::text as count FROM item_lots WHERE quantity_on_hand > 0 AND expires_at < CURRENT_DATE`);
+    const expiringSoonCount = await query<{ count: string }>(`SELECT COUNT(DISTINCT item_id)::text as count FROM item_lots WHERE quantity_on_hand > 0 AND expires_at >= CURRENT_DATE AND expires_at < CURRENT_DATE + INTERVAL '7 days'`);
+    const expiringMonthCount = await query<{ count: string }>(`SELECT COUNT(DISTINCT item_id)::text as count FROM item_lots WHERE quantity_on_hand > 0 AND expires_at >= CURRENT_DATE AND expires_at < CURRENT_DATE + INTERVAL '30 days'`);
+    const quantifiableTotalCount = await query<{ count: string }>(`SELECT COUNT(*)::text as count FROM items WHERE item_type = 'quantifiable' AND deleted_at IS NULL`);
+
     res.json({
       stats: {
         totalItems: parseInt(itemCount.rows[0].count, 10),
@@ -114,6 +120,12 @@ export async function getDashboardStats(req: AuthRequest, res: Response, next: N
         offlineDevicesCount: parseInt(offlineCount.rows[0].count, 10),
         recentCheckoutsCount: parseInt(checkoutCount.rows[0].count, 10),
         activeCheckoutsCount: parseInt(activeCheckoutCount.rows[0].count, 10),
+        expirationKpis: {
+          expired: parseInt(expiredCount.rows[0].count, 10),
+          expiringSoon: parseInt(expiringSoonCount.rows[0].count, 10),
+          expiringMonth: parseInt(expiringMonthCount.rows[0].count, 10),
+          safe: parseInt(quantifiableTotalCount.rows[0].count, 10) - parseInt(expiringMonthCount.rows[0].count, 10) - parseInt(expiredCount.rows[0].count, 10),
+        }
       },
     });
   } catch (err) {
