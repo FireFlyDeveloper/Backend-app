@@ -287,7 +287,7 @@ export async function createCheckout(
     throw new ValidationError('At least one checkout line is required');
   }
 
-  const status = isAdminOrStaff ? 'open' : 'approved';
+  const status = isAdminOrStaff ? 'open' : 'pending_approval';
 
   return withTransaction(async (client) => {
     // Create transaction
@@ -340,7 +340,7 @@ export async function createCheckout(
       }
 
       // Only deduct stock for admin/staff immediate checkouts
-      if (status === 'open' || status === 'approved') {
+      if (status === 'open') {
         await client.query(
           `UPDATE item_lots
            SET quantity_on_hand = quantity_on_hand - $1,
@@ -432,7 +432,7 @@ export async function approveCheckout(
 
     const updated = await client.query(
       `UPDATE checkout_transactions
-       SET status = 'approved', processed_by = $1, updated_at = now()
+       SET status = 'open', processed_by = $1, updated_at = now()
        WHERE id = $2
        RETURNING *`,
       [approvedBy, checkoutId]

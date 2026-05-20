@@ -157,7 +157,7 @@ export interface ItemLot {
   updated_at: Date;
 }
 
-export type CheckoutStatus = 'pending_approval' | 'approved' | 'open' | 'partially_returned' | 'closed' | 'cancelled' | 'rejected';
+export type CheckoutStatus = 'pending_approval' | 'open' | 'partially_returned' | 'closed' | 'cancelled' | 'rejected';
 
 export interface CheckoutTransaction {
   id: string;
