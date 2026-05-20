@@ -432,7 +432,7 @@ export async function approveCheckout(
 
     const updated = await client.query(
       `UPDATE checkout_transactions
-       SET status = 'open', processed_by = $1, updated_at = now()
+       SET status = 'approved', processed_by = $1, updated_at = now()
        WHERE id = $2
        RETURNING *`,
       [approvedBy, checkoutId]
