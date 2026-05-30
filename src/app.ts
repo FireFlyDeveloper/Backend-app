@@ -14,6 +14,7 @@ import reportRoutes from './routes/reports';
 import publicRoutes from './routes/public';
 import onlyofficeRoutes from './routes/onlyoffice';
 import { errorHandler } from './middleware/errorHandler';
+import { sanitizeInputs } from './middleware/security';
 import { initMqtt } from './services/mqttService';
 import { initWebSocket } from './services/websocketService';
 import { runMissingDetectionJob, runDeviceOfflineJob } from './services/bleService';
@@ -45,6 +46,7 @@ app.use(cors({
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(sanitizeInputs);
 
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);

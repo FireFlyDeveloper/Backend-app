@@ -3,7 +3,7 @@ import path from 'path';
 import { PoolClient } from 'pg';
 import pool from '../src/utils/db';
 
-const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.join(__dirname, '..', 'migrations');
 
 interface MigrationFile {
   name: string;
